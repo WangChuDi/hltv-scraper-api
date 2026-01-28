@@ -13,6 +13,6 @@ class ResultsParser(Parser):
             if date:
                 standard_date = ResultDateFormatter.format(date)
             
-            matches = [MP.parse(result, standard_date) for result in sublist.css("a.a-reset")]
+            matches = [MP.parse(result, standard_date) for result in sublist.css("div.result-con")]
             all_results.extend(matches)
         return all_results

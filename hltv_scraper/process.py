@@ -8,8 +8,9 @@ class Process(ABC):
 
 class SpiderProcess(Process):
     def execute(self, spider_name: str, dir: str, args: str) -> None:
+        import sys
         process = subprocess.Popen(
-            ["scrapy", "crawl", spider_name] + args.split(),
+            [sys.executable, "-m", "scrapy", "crawl", spider_name] + args.split(),
             cwd=dir,
         )
         process.wait()

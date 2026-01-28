@@ -77,7 +77,15 @@ Returns upcoming matches.
 ```http
 GET /api/v1/matches/<id>/<match_name>
 ```
-Returns details of the selected match.
+Returns details of the selected match, including `demoUrl`.
+
+## Demos
+
+### Download Demo
+```http
+GET /api/v1/download/demo/<demo_id>
+```
+Proxies and streams the demo file download from HLTV (bypassing restrictions).
 
 ## Players
 

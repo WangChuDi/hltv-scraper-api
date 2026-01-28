@@ -13,4 +13,5 @@ class MatchParser(Parser):
             "date": date,
             "team1": TeamParser.parse(result, 1),
             "team2": TeamParser.parse(result, 2),
+            "demoUrl": result.xpath('following-sibling::div[contains(@class, "streams")][1]//a[@data-demo-link]/@data-demo-link').get(),
         }

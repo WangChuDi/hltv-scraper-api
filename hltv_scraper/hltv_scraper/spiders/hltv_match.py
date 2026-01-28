@@ -15,18 +15,28 @@ class HltvMatchSpider(scrapy.Spider):
         super().__init__(**kwargs)
 
     def start_requests(self) -> Generator[dict[str, None] | Request, Any, None]:
-        scraper = cloudscraper.create_scraper()
+        from curl_cffi import requests
+
         for url in self.start_urls:
             try:
-                response_data = scraper.get(url)
+                # Impersonate Safari 15.3 to bypass Cloudflare
+                response_data = requests.get(url, impersonate="safari15_3")
+                
+                if response_data.status_code == 403:
+                    self.logger.error(f"Error fetching {url}: 403 Forbidden (Cloudflare block)")
+                
                 response = HtmlResponse(
                     url=url,
                     body=response_data.content,
                     encoding='utf-8'
                 )
+                
+
+
                 yield from self.parse(response)
             except Exception as e:
                 self.logger.error(f"Error fetching {url}: {e}")
+                # Fallback to standard request if curl_cffi completely fails (unlikely to help if CF blocked)
                 yield scrapy.Request(
                     url=url,
                     callback=self.parse,
@@ -37,4 +47,7 @@ class HltvMatchSpider(scrapy.Spider):
         maps_score = PF.get_parser("map_holders").parse(response)
         player_stats = PF.get_parser("table_stats").parse(response.css("#all-content"))
 
-        yield {"match": teams_box, "maps": maps_score, "stats": player_stats}
+        demo_url = response.css('a.stream-box[data-demo-link]::attr(data-demo-link)').get()
+        if demo_url and not demo_url.startswith("http"):
+             demo_url = f"https://www.hltv.org{demo_url}"
+        yield {"match": teams_box, "maps": maps_score, "stats": player_stats, "demoUrl": demo_url}
