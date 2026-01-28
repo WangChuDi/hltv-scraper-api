@@ -1,0 +1,11 @@
+services:
+  hltv-api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_DEBUG=1
+      - FLASK_APP=app.py
+    restart: unless-stopped
