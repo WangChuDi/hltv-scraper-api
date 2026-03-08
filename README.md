@@ -18,6 +18,50 @@ python app.py
 http://127.0.0.1:8000/apidocs/#/
 ```
 
+## Events
+
+### Get All Events
+```http
+GET /api/v1/events/
+```
+Returns all events from HLTV.
+
+### Event Matches
+```http
+GET /api/v1/events/<id>/<slug>/matches
+```
+Returns all matches for a specific event.
+
+### Search Events
+```http
+GET /api/v1/events/search?q=<query>
+```
+Searches for events by name.
+
+### Discover Event
+```http
+GET /api/v1/events/discover?url=<event_url>
+```
+Discovers event details and all grouped events.
+
+### Get Event Details
+```http
+GET /api/v1/events/details?url=<event_url>
+```
+Returns event details including grouped events.
+
+### Get Event Tier
+```http
+GET /api/v1/events/tier?name=<event_name>
+```
+Returns event tier from Liquipedia (S-tier, A-tier, etc.).
+
+### Get Ongoing Tournaments
+```http
+GET /api/v1/events/ongoing
+```
+Returns ongoing S-tier tournaments from Liquipedia.
+
 ## Teams
 
 ### Team Rankings

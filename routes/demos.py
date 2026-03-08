@@ -31,7 +31,7 @@ def download_demo(demo_id: str):
         # Use curl_cffi to bypass Cloudflare
         # impersonate="safari15_3" worked for match details, using it here too
         # stream=True is critical for large file downloads
-        upstream_resp = requests.get(target_url, impersonate="safari15_3", stream=True)
+        upstream_resp = requests.get(target_url, impersonate="chrome142", stream=True)
         
         if upstream_resp.status_code != 200:
             return {"error": f"Failed to fetch demo: HLTV returned {upstream_resp.status_code}"}, upstream_resp.status_code

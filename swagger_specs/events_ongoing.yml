@@ -1,0 +1,24 @@
+Get ongoing S-tier tournaments from Liquipedia
+---
+tags:
+  - Events
+responses:
+  200:
+    description: List of ongoing S-tier tournaments
+    schema:
+      type: object
+      properties:
+        tournaments:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              tier:
+                type: string
+                enum: [S]
+        total:
+          type: integer
+  500:
+    description: Server error

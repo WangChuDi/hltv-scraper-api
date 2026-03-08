@@ -14,6 +14,7 @@ def create_app():
     from routes.news import news_bp
     from routes.results import results_bp
     from routes.demos import demos_bp
+    from routes.events import events_bp
 
     app.register_blueprint(teams_bp)
     app.register_blueprint(players_bp)
@@ -21,6 +22,7 @@ def create_app():
     app.register_blueprint(news_bp)
     app.register_blueprint(results_bp)
     app.register_blueprint(demos_bp)
+    app.register_blueprint(events_bp)
 
     return app
 
