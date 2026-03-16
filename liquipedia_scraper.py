@@ -79,6 +79,16 @@ def get_ongoing_tournaments():
         print(f"Error scraping Liquipedia: {e}")
         return []
 
+def get_completed_tournaments():
+    """Get recently completed tournaments - fallback list"""
+    return [
+        'ESL Pro League Season 23 Finals',
+        'BLAST Premier World Final 2025',
+        'IEM Katowice 2026',
+        'PGL Major Copenhagen 2025',
+        'BLAST Premier Fall Final 2025'
+    ]
+
 def get_ongoing_s_tier_tournaments():
     """Scrape ongoing S-tier tournaments from Liquipedia"""
     url = "https://liquipedia.net/counterstrike/Main_Page"

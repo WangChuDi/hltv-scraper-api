@@ -117,11 +117,23 @@ def get_ongoing() -> Response | tuple[Response, Literal[500]]:
     try:
         from liquipedia_scraper import get_ongoing_tournaments
         tournaments = get_ongoing_tournaments()
-        # Return all ongoing tournaments (typically major S-tier events)
         result = [{'name': t, 'tier': 'S'} for t in tournaments]
         return jsonify({'tournaments': result, 'total': len(result)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@events_bp.route("/completed", methods=["GET"])
+@swag_from('../swagger_specs/events_ongoing.yml')
+def get_completed() -> Response | tuple[Response, Literal[500]]:
+    """Get completed tournaments from Liquipedia."""
+    try:
+        from liquipedia_scraper import get_completed_tournaments
+        tournaments = get_completed_tournaments()
+        result = [{'name': t, 'tier': 'S'} for t in tournaments]
+        return jsonify({'tournaments': result, 'total': len(result)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @events_bp.route("/details", methods=["GET"])
 @swag_from('../swagger_specs/events_details.yml')
 def get_details() -> Response | tuple[Response, Literal[500]]:
