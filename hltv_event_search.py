@@ -67,6 +67,12 @@ def get_event_with_grouped_events(event_url):
             if title:
                 event_name = title.get_text(strip=True)
         
+        if not event_name:
+            import re
+            match = re.search(r'/events/\d+/([^/]+)', event_url)
+            if match:
+                event_name = match.group(1).replace('-', ' ').title()
+        
         # Extract grouped events
         grouped_events = []
         grouped_container = soup.find('div', class_='linked-events-container-slider')
