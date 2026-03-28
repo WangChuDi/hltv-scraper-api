@@ -18,13 +18,6 @@ class TestRoutesEndpoints:
             </div>
         </body></html>
         '''
-        event_html = '''
-        <html><body>
-            <div class="contentCol">
-                <a href="/matches/obfuscated-token">Hidden</a>
-            </div>
-        </body></html>
-        '''
 
         with app.app_context():
             with patch('curl_cffi.requests.get') as mock_get:

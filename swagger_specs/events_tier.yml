@@ -1,5 +1,3 @@
-Get event tier from Liquipedia
----
 tags:
   - Events
 parameters:
@@ -7,7 +5,7 @@ parameters:
     in: query
     type: string
     required: true
-    description: Event name (e.g., 'ESL Pro League Season 23 Stage 1')
+    description: Event name (e.g., ESL Pro League Season 23 Stage 1)
     example: ESL Pro League Season 23 Stage 1
 responses:
   200:
@@ -20,8 +18,8 @@ responses:
           example: ESL Pro League Season 23 Stage 1
         tier:
           type: string
-          nullable: true
-          enum: [S, A, B, C, null]
+          description: Event tier, or null when Liquipedia has no tier for the event
+          enum: [S, A, B, C]
           example: S
   400:
     description: Missing event name parameter

@@ -1,5 +1,5 @@
 from typing import Literal
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify
 from flasgger import swag_from
 
 from hltv_scraper import HLTVScraper

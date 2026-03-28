@@ -1,13 +1,32 @@
 """
 HLTV Event scraper for grouped events
 """
+from urllib.parse import urlparse
+
 from curl_cffi import requests
 from bs4 import BeautifulSoup
+
+
+def _normalize_hltv_event_url(event_url):
+    if not event_url:
+        return None
+    if event_url.startswith('/events/'):
+        return f'https://www.hltv.org{event_url}'
+
+    parsed = urlparse(event_url)
+    if parsed.scheme == 'https' and parsed.netloc == 'www.hltv.org' and parsed.path.startswith('/events/'):
+        return event_url
+
+    return None
 
 def get_event_details(event_url):
     """Get event details including grouped events"""
     try:
-        response = requests.get(event_url, impersonate="chrome142", timeout=10)
+        normalized_url = _normalize_hltv_event_url(event_url)
+        if not normalized_url:
+            return None
+
+        response = requests.get(normalized_url, impersonate="chrome142", timeout=10)
         soup = BeautifulSoup(response.content, 'html.parser')
         
         # Extract event name
@@ -37,7 +56,7 @@ def get_event_details(event_url):
         
         return {
             'name': event_name,
-            'url': event_url,
+            'url': normalized_url,
             'grouped_events': grouped_events
         }
     except Exception as e:

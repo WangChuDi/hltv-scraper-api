@@ -138,7 +138,7 @@ class HLTVScraper:
         return manager.get_result(path)
 
     @staticmethod
-    def get_events() -> Dict[str, Any]:
+    def get_events() -> list[dict[str, Any]]:
         """Get unique events from recent results"""
         results = HLTVScraper.get_results(0)
         events_dict = {}

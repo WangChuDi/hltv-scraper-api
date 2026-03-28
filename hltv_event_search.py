@@ -1,10 +1,24 @@
 import datetime
 import re
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from curl_cffi import requests
 
 from liquipedia_scraper import get_event_tier
+
+
+def _normalize_hltv_event_url(event_url):
+    if not event_url:
+        return None
+    if event_url.startswith('/events/'):
+        return event_url
+
+    parsed = urlparse(event_url)
+    if parsed.scheme == 'https' and parsed.netloc == 'www.hltv.org' and parsed.path.startswith('/events/'):
+        return parsed.path
+
+    return None
 
 
 def _parse_money_amount(text):
@@ -68,7 +82,10 @@ def get_live_box_event():
 
 def get_hltv_event_metadata(event_url):
     try:
-        full_url = f"https://www.hltv.org{event_url}" if event_url.startswith('/') else event_url
+        event_path = _normalize_hltv_event_url(event_url)
+        if not event_path:
+            return None
+        full_url = f"https://www.hltv.org{event_path}"
         resp = requests.get(full_url, impersonate='chrome142', timeout=10)
         soup = BeautifulSoup(resp.content, 'html.parser')
 
@@ -106,7 +123,7 @@ def get_hltv_event_metadata(event_url):
         return {
             'raw_name': raw_name,
             'source': 'hltv',
-            'url': event_url,
+            'url': event_path,
             'start_date': start_date,
             'end_date': end_date,
             'location_text': location_text,
@@ -172,7 +189,10 @@ def search_events(query):
 
 def get_event_with_grouped_events(event_url):
     try:
-        full_url = f"https://www.hltv.org{event_url}" if event_url.startswith('/') else event_url
+        event_path = _normalize_hltv_event_url(event_url)
+        if not event_path:
+            return None
+        full_url = f"https://www.hltv.org{event_path}"
         resp = requests.get(full_url, impersonate='chrome142', timeout=10)
         soup = BeautifulSoup(resp.content, 'html.parser')
 
@@ -203,7 +223,7 @@ def get_event_with_grouped_events(event_url):
 
         return {
             'name': event_name,
-            'url': event_url,
+            'url': event_path,
             'tier': get_event_tier(event_name) if event_name else None,
             'grouped_events': grouped_events,
         }

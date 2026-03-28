@@ -1,5 +1,3 @@
-Get event details including grouped events
----
 tags:
   - Events
 parameters:
@@ -7,8 +5,8 @@ parameters:
     in: query
     type: string
     required: true
-    description: Event URL from HLTV
-    example: https://www.hltv.org/events/8241/esl-pro-league-season-23-stage-1
+    description: HLTV event URL or relative /events/... path
+    example: /events/8241/esl-pro-league-season-23-stage-1
 responses:
   200:
     description: Event details with grouped events
@@ -29,7 +27,7 @@ responses:
               url:
                 type: string
   400:
-    description: Missing URL parameter
+    description: Missing or invalid URL parameter
   404:
     description: Failed to fetch event details
   500:

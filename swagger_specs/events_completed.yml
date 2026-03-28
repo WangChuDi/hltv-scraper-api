@@ -2,7 +2,7 @@ tags:
   - Events
 responses:
   200:
-    description: List of ongoing tournaments
+    description: List of completed tournaments
     schema:
       type: object
       properties:
