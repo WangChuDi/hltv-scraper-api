@@ -25,44 +25,54 @@ def event_matches(event_id: int, slug: str) -> Response | tuple[Response, Litera
     try:
         from curl_cffi import requests
         from bs4 import BeautifulSoup
-        
-        url = f"https://www.hltv.org/events/{event_id}/{slug}"
-        resp = requests.get(url, impersonate="chrome142", timeout=10)
-        
-        if resp.status_code != 200:
-            return jsonify({"error": f"Failed to fetch event page: {resp.status_code}"}), resp.status_code
-        
-        soup = BeautifulSoup(resp.content, 'html.parser')
-        matches = []
-        
-        # Find matches in the main event content area only
-        # Look for match links within specific containers to avoid sidebar/unrelated matches
-        event_content = soup.find('div', class_='contentCol') or soup
-        
-        for link in event_content.find_all('a', href=lambda x: x and '/matches/' in x):
-            href = link.get('href')
-            if href.startswith('/matches/'):
+
+        def extract_standard_match_links(soup, selector='a[href]'):
+            matches = []
+            for link in soup.select(selector):
+                href = link.get('href')
+                if not isinstance(href, str) or not href.startswith('/matches/'):
+                    continue
+
                 parts = href.split('/')
-                if len(parts) >= 4:
-                    # Verify the slug contains the event name to filter out unrelated matches
-                    slug_lower = parts[3].lower()
-                    event_slug_lower = slug.lower()
-                    # Extract key parts of event slug for matching
-                    event_key_parts = [p for p in event_slug_lower.split('-') if len(p) > 3]
-                    # Check if match slug contains event identifier
-                    if any(part in slug_lower for part in event_key_parts[:2]):
-                        matches.append({"id": parts[2], "slug": parts[3], "url": f"https://www.hltv.org{href}"})
+                if len(parts) < 4 or not parts[2].isdigit():
+                    continue
+
+                matches.append({
+                    "id": parts[2],
+                    "slug": parts[3],
+                    "url": f"https://www.hltv.org{href}",
+                })
+
+            seen = set()
+            unique = []
+            for match in matches:
+                if match['id'] in seen:
+                    continue
+                seen.add(match['id'])
+                unique.append(match)
+
+            return unique
         
-        # Deduplicate
-        seen = set()
-        unique = []
-        for m in matches:
-            key = m['id']
-            if key not in seen:
-                seen.add(key)
-                unique.append(m)
-        
-        return jsonify({"event_id": event_id, "matches": unique, "total": len(unique)})
+        matches = []
+
+        results_url = f"https://www.hltv.org/results?event={event_id}"
+        results_resp = requests.get(results_url, impersonate="chrome142", timeout=10)
+        if results_resp.status_code == 200:
+            results_soup = BeautifulSoup(results_resp.content, 'html.parser')
+            matches = extract_standard_match_links(results_soup, 'div.results-holder div.result-con > a[href]')
+
+        if not matches:
+            event_url = f"https://www.hltv.org/events/{event_id}/{slug}"
+            event_resp = requests.get(event_url, impersonate="chrome142", timeout=10)
+
+            if event_resp.status_code != 200:
+                return jsonify({"error": f"Failed to fetch event page: {event_resp.status_code}"}), event_resp.status_code
+
+            event_soup = BeautifulSoup(event_resp.content, 'html.parser')
+            event_content = event_soup.find('div', class_='contentCol') or event_soup
+            matches = extract_standard_match_links(event_content)
+
+        return jsonify({"event_id": event_id, "matches": matches, "total": len(matches)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

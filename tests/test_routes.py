@@ -5,6 +5,55 @@ from unittest.mock import Mock, patch
 class TestRoutesEndpoints:
     """Tests for all API route endpoints."""
 
+    def test_event_matches_endpoint_prefers_results_page_links(self, client, app):
+        results_html = '''
+        <html><body>
+            <a href="/matches/9999999/unrelated-event-match">Unrelated match</a>
+            <div class="results-holder">
+                <div class="result-con">
+                    <a href="/matches/2391771/aurora-vs-the-mongolz-blast-open-rotterdam-2026">Aurora vs The MongolZ</a>
+                    <a href="/matches/2391770/the-mongolz-vs-spirit-blast-open-rotterdam-2026">The MongolZ vs Spirit</a>
+                    <a href="/matches/2391771/aurora-vs-the-mongolz-blast-open-rotterdam-2026">Duplicate</a>
+                </div>
+            </div>
+        </body></html>
+        '''
+        event_html = '''
+        <html><body>
+            <div class="contentCol">
+                <a href="/matches/obfuscated-token">Hidden</a>
+            </div>
+        </body></html>
+        '''
+
+        with app.app_context():
+            with patch('curl_cffi.requests.get') as mock_get:
+                results_response = Mock()
+                results_response.status_code = 200
+                results_response.content = results_html.encode('utf-8')
+                mock_get.return_value = results_response
+
+                response = client.get('/api/v1/events/8248/blast-open-rotterdam-2026/matches')
+
+                assert response.status_code == 200
+                assert mock_get.call_count == 1
+                assert mock_get.call_args_list[0].args[0] == 'https://www.hltv.org/results?event=8248'
+                data = json.loads(response.data)
+                assert data['event_id'] == 8248
+                assert data['total'] == 2
+                assert data['matches'] == [
+                    {
+                        'id': '2391771',
+                        'slug': 'aurora-vs-the-mongolz-blast-open-rotterdam-2026',
+                        'url': 'https://www.hltv.org/matches/2391771/aurora-vs-the-mongolz-blast-open-rotterdam-2026',
+                    },
+                    {
+                        'id': '2391770',
+                        'slug': 'the-mongolz-vs-spirit-blast-open-rotterdam-2026',
+                        'url': 'https://www.hltv.org/matches/2391770/the-mongolz-vs-spirit-blast-open-rotterdam-2026',
+                    },
+                ]
+
     def test_teams_ranking_endpoint(self, client, app):
         """Test teams ranking endpoint."""
         mock_data = {"teams": ["Natus Vincere", "Astralis", "FaZe Clan"]}
@@ -79,7 +128,14 @@ class TestRoutesEndpoints:
 
     def test_player_search_success(self, client, app):
         """Test player search with successful result."""
-        mock_data = {"player": "s1mple", "team": "NAVI", "rating": 1.25}
+        mock_data = [
+            {
+                "name": "Oleksandr 's1mple' Kostyliev",
+                "profile_link": "/player/7998/s1mple",
+                "img": "https://img-cdn.hltv.org/playerbodyshot/example.png",
+                "player_image": "https://img-cdn.hltv.org/playerbodyshot/example.png",
+            }
+        ]
         
         with app.app_context():
             with patch('hltv_scraper.HLTVScraper._get_manager') as mock_get_manager:
@@ -93,6 +149,8 @@ class TestRoutesEndpoints:
                 assert response.status_code == 200
                 data = json.loads(response.data)
                 assert data == mock_data
+                assert isinstance(data, list)
+                assert data[0]["player_image"].startswith("https://")
 
     def test_player_search_not_found(self, client, app):
         """Test player search when player is not found."""
@@ -138,3 +196,65 @@ class TestRoutesEndpoints:
                 assert response.status_code == 404
                 data = json.loads(response.data)
                 assert data == {"error": "Team not found!"}
+
+
+class TestSearchEvents:
+    def test_returns_results_from_events_page(self, app):
+        events_html = b"""<html><body>
+            <a href="/events/8248/blast-open-rotterdam-2026"><div class="text-ellipsis">BLAST Open Rotterdam 2026</div><td>16</td><td>$1,100,000</td></a>
+            <a href="/events/8323/esl-pro-league-season-26"><div class="text-ellipsis">ESL Pro League Season 26</div><td>24</td></a>
+        </body></html>"""
+        archive_html = b"""<html><body>
+            <a href="/events/8413/esl-pro-league-season-23-finals"><div class="text-ellipsis">ESL Pro League Season 23 Finals</div><td>8</td><td>$776,000</td><td>Intl. LAN</td></a>
+            <a href="/events/8412/esl-pro-league-season-23-stage-2"><div class="text-ellipsis">ESL Pro League Season 23 Stage 2</div><td>16</td><td>$185,000</td></a>
+        </body></html>"""
+
+        with app.app_context():
+            with patch('hltv_event_search.requests.get') as mock_get:
+                events_response = Mock()
+                events_response.status_code = 200
+                events_response.content = events_html
+
+                archive_response = Mock()
+                archive_response.status_code = 200
+                archive_response.content = archive_html
+
+                mock_get.side_effect = [events_response, archive_response]
+
+                from hltv_event_search import search_events
+                results = search_events('ESL Pro League Season 23')
+
+                assert len(results) == 2
+                assert results[0]['event_id'] == '8413'
+                assert results[0]['url'] == '/events/8413/esl-pro-league-season-23-finals'
+                assert results[0]['name'] == 'ESL Pro League Season 23 Finals'
+                assert results[1]['event_id'] == '8412'
+                assert results[1]['url'] == '/events/8412/esl-pro-league-season-23-stage-2'
+                assert results[1]['name'] == 'ESL Pro League Season 23 Stage 2'
+
+    def test_search_endpoint_returns_results(self, client, app):
+        events_html = b"""<html><body>
+            <a href=\"/events/8248/blast-open-rotterdam-2026\">BLAST Open Rotterdam 2026</a>
+        </body></html>"""
+        archive_html = b"""<html><body></body></html>"""
+
+        with app.app_context():
+            with patch('hltv_event_search.requests.get') as mock_get:
+                events_response = Mock()
+                events_response.status_code = 200
+                events_response.content = events_html
+
+                archive_response = Mock()
+                archive_response.status_code = 200
+                archive_response.content = archive_html
+
+                mock_get.side_effect = [events_response, archive_response]
+
+                response = client.get('/api/v1/events/search?q=BLAST%20Open%20Rotterdam')
+
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert data['total'] == 1
+                assert data['results'][0]['event_id'] == '8248'
+                assert data['results'][0]['url'] == '/events/8248/blast-open-rotterdam-2026'
+                assert data['results'][0]['name'] == 'BLAST Open Rotterdam 2026'
