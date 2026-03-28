@@ -20,7 +20,7 @@ class HltvMatchSpider(scrapy.Spider):
         for url in self.start_urls:
             try:
                 # Impersonate Safari 15.3 to bypass Cloudflare
-                response_data = requests.get(url, impersonate="safari15_3")
+                response_data = requests.get(url, impersonate="chrome142")
                 
                 if response_data.status_code == 403:
                     self.logger.error(f"Error fetching {url}: 403 Forbidden (Cloudflare block)")

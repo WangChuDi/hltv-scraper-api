@@ -1,0 +1,34 @@
+tags:
+  - Events
+parameters:
+  - name: url
+    in: query
+    type: string
+    required: true
+    description: HLTV event URL or relative /events/... path
+    example: /events/8241/esl-pro-league-season-23-stage-1
+responses:
+  200:
+    description: Event details with grouped events
+    schema:
+      type: object
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+        grouped_events:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              url:
+                type: string
+  400:
+    description: Missing or invalid URL parameter
+  404:
+    description: Failed to fetch event details
+  500:
+    description: Server error

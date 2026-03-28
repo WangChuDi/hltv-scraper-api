@@ -1,0 +1,7 @@
+tags:
+  - Events
+responses:
+  200:
+    description: List of events
+  500:
+    description: Server error

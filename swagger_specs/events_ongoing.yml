@@ -1,0 +1,19 @@
+tags:
+  - Events
+responses:
+  200:
+    description: List of ongoing tournaments
+    schema:
+      type: object
+      properties:
+        tournaments:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+        total:
+          type: integer
+  500:
+    description: Server error

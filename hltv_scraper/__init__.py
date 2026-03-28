@@ -136,3 +136,14 @@ class HLTVScraper:
         args = f"-a profile=/{id}/{player_name} -o data/{path}.json"
         manager.execute(name, path, args, CACHE_HOURS_PLAYER_STATS)
         return manager.get_result(path)
+
+    @staticmethod
+    def get_events() -> list[dict[str, Any]]:
+        """Get unique events from recent results"""
+        results = HLTVScraper.get_results(0)
+        events_dict = {}
+        for match in results:
+            event_name = match.get('event', '')
+            if event_name and event_name not in events_dict:
+                events_dict[event_name] = {'name': event_name, 'url': None}
+        return list(events_dict.values())

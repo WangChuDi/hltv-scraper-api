@@ -1,0 +1,36 @@
+tags:
+  - Events
+parameters:
+  - name: event_id
+    in: path
+    type: integer
+    required: true
+    description: Event ID from HLTV
+    example: 8241
+  - name: slug
+    in: path
+    type: string
+    required: true
+    description: Event slug
+    example: esl-pro-league-season-23-stage-1
+responses:
+  200:
+    description: List of matches for the event
+    schema:
+      type: object
+      properties:
+        event_id:
+          type: integer
+        matches:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              slug:
+                type: string
+        total:
+          type: integer
+  500:
+    description: Server error

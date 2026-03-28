@@ -9,6 +9,7 @@ class MatchTeamsBoxParser(Parser):
         "date": teams_box.css("div.date::text").get(),
         "hour": teams_box.css("div.time::text").get(),
         "event": teams_box.css("div.event ::text").get(),
+        "eventUrl": teams_box.css("div.event a::attr(href)").get(),
         "team1": MTP.parse(teams_box, 1),
         "team2": MTP.parse(teams_box, 2),
     }

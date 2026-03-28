@@ -1,0 +1,27 @@
+tags:
+  - Events
+parameters:
+  - name: q
+    in: query
+    type: string
+    required: true
+    description: Search query for event name
+    example: ESL Pro League 23
+responses:
+  200:
+    description: Search results
+    schema:
+      type: object
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+  400:
+    description: Missing query parameter
+  500:
+    description: Server error

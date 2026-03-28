@@ -1,0 +1,27 @@
+tags:
+  - Events
+parameters:
+  - name: name
+    in: query
+    type: string
+    required: true
+    description: Event name (e.g., ESL Pro League Season 23 Stage 1)
+    example: ESL Pro League Season 23 Stage 1
+responses:
+  200:
+    description: Event tier information
+    schema:
+      type: object
+      properties:
+        event_name:
+          type: string
+          example: ESL Pro League Season 23 Stage 1
+        tier:
+          type: string
+          description: Event tier, or null when Liquipedia has no tier for the event
+          enum: [S, A, B, C]
+          example: S
+  400:
+    description: Missing event name parameter
+  500:
+    description: Server error
