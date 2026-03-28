@@ -5,31 +5,96 @@ from curl_cffi import requests
 from bs4 import BeautifulSoup
 import re
 
+
+def _build_liquipedia_event_url(event_name):
+    event_lower = event_name.lower()
+
+    if 'esl pro league' in event_lower:
+        match = re.search(r'season\s*(\d+)', event_lower)
+        if match:
+            return f'https://liquipedia.net/counterstrike/ESL/Pro_League/Season_{match.group(1)}'
+    elif 'iem' in event_lower:
+        parts = event_name.split()
+        if len(parts) >= 2:
+            return f'https://liquipedia.net/counterstrike/Intel_Extreme_Masters/{parts[-1]}'
+    elif 'blast premier' in event_lower:
+        match = re.search(r'(spring|fall|world final)', event_lower)
+        year_match = re.search(r'20\d{2}', event_name)
+        if match and year_match:
+            return f'https://liquipedia.net/counterstrike/BLAST/Premier/{year_match.group(0)}/{match.group(1).title()}'
+    elif 'blast open' in event_lower:
+        year_match = re.search(r'20\d{2}', event_name)
+        season_match = re.search(r'(spring|fall)', event_lower)
+        if year_match and season_match:
+            return f'https://liquipedia.net/counterstrike/BLAST/Open/{year_match.group(0)}/{season_match.group(1).title()}'
+        if year_match and 'rotterdam' in event_lower:
+            return f'https://liquipedia.net/counterstrike/BLAST/Open/{year_match.group(0)}/Spring'
+        if year_match and 'copenhagen' in event_lower:
+            return f'https://liquipedia.net/counterstrike/BLAST/Open/{year_match.group(0)}/Fall'
+    elif 'pgl' in event_lower:
+        parts = event_name.replace('PGL', '').strip().split()
+        if parts:
+            return f'https://liquipedia.net/counterstrike/PGL/{"".join(parts)}'
+
+    return None
+
+
+def _parse_money_amount(text):
+    match = re.search(r'\$([\d,]+)', text or '')
+    return int(match.group(1).replace(',', '')) if match else None
+
+
+def _extract_text_block(text, start_label, end_labels):
+    start_match = re.search(rf'{re.escape(start_label)}:\s*', text)
+    if not start_match:
+        return None
+
+    tail = text[start_match.end():]
+    end_positions = [tail.find(f'{label}:') for label in end_labels if tail.find(f'{label}:') != -1]
+    end_pos = min(end_positions) if end_positions else len(tail)
+    return tail[:end_pos].strip()
+
+
+def get_liquipedia_event_metadata(event_name):
+    try:
+        url = _build_liquipedia_event_url(event_name)
+        if not url:
+            return None
+
+        response = requests.get(url, timeout=10, impersonate='chrome')
+        if response.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+        raw_name = soup.title.get_text(strip=True).replace(' - Liquipedia Counter-Strike Wiki', '') if soup.title else event_name
+        text = soup.get_text('\n', strip=True)
+
+        location_block = _extract_text_block(text, 'Location', ['Venue', 'Prize Pool', 'Start Date'])
+        locations = [line.strip() for line in location_block.split('\n') if line.strip()] if location_block else []
+        start_date_match = re.search(r'Start Date:\s*(\d{4}-\d{2}-\d{2})', text)
+        end_date_match = re.search(r'End Date:\s*(\d{4}-\d{2}-\d{2})', text)
+        prize_block = _extract_text_block(text, 'Prize Pool', ['Start Date', 'End Date', 'Teams'])
+
+        return {
+            'raw_name': raw_name,
+            'source': 'liquipedia',
+            'url': url,
+            'start_date': start_date_match.group(1) if start_date_match else None,
+            'end_date': end_date_match.group(1) if end_date_match else None,
+            'location_text': ' | '.join(locations) if locations else None,
+            'locations': locations,
+            'total_prize_pool_usd': None,
+            'player_prize_pool_usd': _parse_money_amount(prize_block or ''),
+            'club_prize_pool_usd': None,
+        }
+    except Exception as e:
+        print(f'Error fetching Liquipedia metadata for {event_name}: {e}')
+        return None
+
 def get_event_tier(event_name):
     """Get tournament tier from Liquipedia"""
     try:
-        event_lower = event_name.lower()
-        url = None
-        
-        # Parse event name to Liquipedia URL
-        if 'esl pro league' in event_lower:
-            match = re.search(r'season\s*(\d+)', event_lower)
-            if match:
-                url = f'https://liquipedia.net/counterstrike/ESL/Pro_League/Season_{match.group(1)}'
-        elif 'iem' in event_lower:
-            parts = event_name.split()
-            if len(parts) >= 2:
-                url = f'https://liquipedia.net/counterstrike/Intel_Extreme_Masters/{parts[-1]}'
-        elif 'blast premier' in event_lower:
-            match = re.search(r'(spring|fall|world final)', event_lower)
-            year_match = re.search(r'20\d{2}', event_name)
-            if match and year_match:
-                url = f'https://liquipedia.net/counterstrike/BLAST/Premier/{year_match.group(0)}/{match.group(1).title()}'
-        elif 'pgl' in event_lower:
-            parts = event_name.replace('PGL', '').strip().split()
-            if parts:
-                url = f'https://liquipedia.net/counterstrike/PGL/{"".join(parts)}'
-        
+        url = _build_liquipedia_event_url(event_name)
         if not url:
             return None
         
