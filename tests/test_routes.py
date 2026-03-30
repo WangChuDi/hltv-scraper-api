@@ -1,11 +1,7 @@
 import json
-import os
-import sys
 from unittest.mock import Mock, patch
 
 from scrapy.http import HtmlResponse
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from hltv_scraper.hltv_scraper.spiders.parsers.match_teams_box import MatchTeamsBoxParser
 

@@ -18,11 +18,11 @@ class MatchTeamsBoxParser(Parser):
     @staticmethod
     def parse(teams_box, response=None) -> dict[str, Any]:
         return {
-        "date": teams_box.css("div.date::text").get(),
-        "hour": teams_box.css("div.time::text").get(),
-        "event": teams_box.css("div.event ::text").get(),
-        "eventUrl": teams_box.css("div.event a::attr(href)").get(),
-        "stage": MatchTeamsBoxParser.extract_stage(response) if response is not None else None,
-        "team1": MTP.parse(teams_box, 1),
-        "team2": MTP.parse(teams_box, 2),
-    }
+            "date": teams_box.css("div.date::text").get(),
+            "hour": teams_box.css("div.time::text").get(),
+            "event": teams_box.css("div.event ::text").get(),
+            "eventUrl": teams_box.css("div.event a::attr(href)").get(),
+            "stage": MatchTeamsBoxParser.extract_stage(response) if response is not None else None,
+            "team1": MTP.parse(teams_box, 1),
+            "team2": MTP.parse(teams_box, 2),
+        }
