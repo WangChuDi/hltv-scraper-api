@@ -1,5 +1,13 @@
 import json
+import os
+import sys
 from unittest.mock import Mock, patch
+
+from scrapy.http import HtmlResponse
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from hltv_scraper.hltv_scraper.spiders.parsers.match_teams_box import MatchTeamsBoxParser
 
 
 class TestRoutesEndpoints:
@@ -46,6 +54,25 @@ class TestRoutesEndpoints:
                         'url': 'https://www.hltv.org/matches/2391770/the-mongolz-vs-spirit-blast-open-rotterdam-2026',
                     },
                 ]
+
+    def test_match_stage_parser_extracts_stage_from_preformatted_text(self):
+        html = b'''
+        <html><body>
+            <div class="teamsBox">
+                <div class="date">27th of March 2026</div>
+                <div class="time">17:35</div>
+                <div class="event text-ellipsis"><a href="/events/8248/blast-open-rotterdam-2026">BLAST Open Rotterdam 2026</a></div>
+                <div class="team1-gradient"><div class="teamName">PARIVISION</div><div class="won">2</div></div>
+                <div class="team2-gradient"><div class="teamName">Falcons</div><div class="lost">1</div></div>
+            </div>
+            <div class="standard-box veto-box"><div class="padding preformatted-text">Best of 3 (LAN)  * Quarter-final</div></div>
+        </body></html>
+        '''
+
+        response = HtmlResponse(url='https://www.hltv.org/matches/2391772/test', body=html, encoding='utf-8')
+        parsed = MatchTeamsBoxParser.parse(response.css('.teamsBox'), response)
+
+        assert parsed['stage'] == 'Quarter-final'
 
     def test_teams_ranking_endpoint(self, client, app):
         """Test teams ranking endpoint."""
