@@ -1,10 +1,17 @@
+import os
+from pathlib import Path
+
 from flask import Flask
 from flasgger import Swagger
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
+
 
 def create_app():
     app = Flask(__name__)
-    
-    app.json.sort_keys = False # type: ignore
+
+    app.json.sort_keys = False  # type: ignore
 
     swagger = Swagger(app)
 
@@ -26,7 +33,8 @@ def create_app():
 
     return app
 
+
 flask_app = create_app()
 
 if __name__ == "__main__":
-    flask_app.run(debug=True, host='0.0.0.0', port=8000)
+    flask_app.run(debug=True, host="0.0.0.0", port=8000)
