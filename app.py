@@ -31,10 +31,14 @@ def create_app():
     app.register_blueprint(demos_bp)
     app.register_blueprint(events_bp)
 
+    @app.get("/health")
+    def health_check():
+        return {"status": "ok"}, 200
+
     return app
 
 
 flask_app = create_app()
 
 if __name__ == "__main__":
-    flask_app.run(debug=True, host="0.0.0.0", port=8000)
+    flask_app.run(debug=False, host="0.0.0.0", port=8000, use_reloader=False)

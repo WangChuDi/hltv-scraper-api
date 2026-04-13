@@ -11,6 +11,12 @@ from hltv_scraper.hltv_scraper.spiders.parsers.match_teams_box import (
 class TestRoutesEndpoints:
     """Tests for all API route endpoints."""
 
+    def test_health_endpoint_returns_ok(self, client):
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert json.loads(response.data) == {"status": "ok"}
+
     def test_demo_download_logs_upstream_403_context(self, client, app, caplog):
         upstream_response = Mock()
         upstream_response.status_code = 403
