@@ -468,6 +468,10 @@ class TestSearchEvents:
 
         with app.app_context():
             with patch("hltv_event_search.requests.get") as mock_get:
+                search_response = Mock()
+                search_response.status_code = 200
+                search_response.json.return_value = []
+
                 events_response = Mock()
                 events_response.status_code = 200
                 events_response.content = events_html
@@ -476,7 +480,11 @@ class TestSearchEvents:
                 archive_response.status_code = 200
                 archive_response.content = archive_html
 
-                mock_get.side_effect = [events_response, archive_response]
+                mock_get.side_effect = [
+                    search_response,
+                    events_response,
+                    archive_response,
+                ]
 
                 response = client.get(
                     "/api/v1/events/search?q=BLAST%20Open%20Rotterdam"
@@ -491,3 +499,68 @@ class TestSearchEvents:
                     == "/events/8248/blast-open-rotterdam-2026"
                 )
                 assert data["results"][0]["name"] == "BLAST Open Rotterdam 2026"
+
+    def test_search_events_prefers_json_search_endpoint_results(self):
+        search_payload = [
+            {
+                "events": [
+                    {
+                        "id": 8048,
+                        "name": "PGL Bucharest 2026",
+                        "location": "/events/8048/pgl-bucharest-2026",
+                        "eventMatchesLocation": "/events/8048/matches",
+                    },
+                    {
+                        "id": 8050,
+                        "name": "PGL Masters Bucharest 2026",
+                        "location": "/events/8050/pgl-masters-bucharest-2026",
+                        "eventMatchesLocation": "/events/8050/matches",
+                    },
+                ]
+            }
+        ]
+
+        with patch("hltv_event_search.requests.get") as mock_get:
+            search_response = Mock()
+            search_response.status_code = 200
+            search_response.json.return_value = search_payload
+            mock_get.return_value = search_response
+
+            from hltv_event_search import search_events
+
+            results = search_events("PGL Bucharest 2026")
+
+            assert len(results) == 2
+            assert results[0]["event_id"] == "8048"
+            assert results[0]["url"] == "/events/8048/pgl-bucharest-2026"
+            assert results[0]["name"] == "PGL Bucharest 2026"
+            assert mock_get.call_count == 1
+
+    def test_search_events_falls_back_to_html_listing_when_json_search_is_empty(self):
+        events_html = b"""<html><body>
+            <a href="/events/8048/pgl-bucharest-2026"><div class="text-ellipsis">PGL Bucharest 2026</div></a>
+        </body></html>"""
+        archive_html = b"""<html><body></body></html>"""
+
+        with patch("hltv_event_search.requests.get") as mock_get:
+            search_response = Mock()
+            search_response.status_code = 200
+            search_response.json.return_value = []
+
+            events_response = Mock()
+            events_response.status_code = 200
+            events_response.content = events_html
+
+            archive_response = Mock()
+            archive_response.status_code = 200
+            archive_response.content = archive_html
+
+            mock_get.side_effect = [search_response, events_response, archive_response]
+
+            from hltv_event_search import search_events
+
+            results = search_events("PGL Bucharest 2026")
+
+            assert len(results) == 1
+            assert results[0]["event_id"] == "8048"
+            assert results[0]["url"] == "/events/8048/pgl-bucharest-2026"
