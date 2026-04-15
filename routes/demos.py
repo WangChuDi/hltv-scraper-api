@@ -7,6 +7,8 @@ import time
 from flask import Blueprint, Response, stream_with_context
 from curl_cffi import requests
 
+from http_client import HLTV_IMPERSONATION_CHAIN, get_with_impersonation_fallback
+
 demos_bp = Blueprint("demos", __name__, url_prefix="/api/v1/download")
 logger = logging.getLogger(__name__)
 
@@ -239,7 +241,13 @@ def _request_hltv_demo(target_url, turnstile_token=None):
             "Referer": target_url,
         }
 
-    return requests.get(target_url, **request_kwargs)
+    return get_with_impersonation_fallback(
+        target_url,
+        impersonate=DEFAULT_HLTV_DEMO_IMPERSONATE,
+        fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+        stream=True,
+        headers=request_kwargs.get("headers"),
+    )
 
 
 def _build_streaming_response_from_upstream(upstream_resp, demo_id):
