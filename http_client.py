@@ -1,0 +1,134 @@
+import os
+from typing import Callable
+
+from curl_cffi import requests
+
+
+HLTV_IMPERSONATION_CHAIN = tuple(
+    value.strip()
+    for value in os.getenv(
+        "HLTV_IMPERSONATION_CHAIN", "chrome136,chrome131,chrome124,chrome142"
+    ).split(",")
+    if value.strip()
+)
+
+LIQUIPEDIA_IMPERSONATION_CHAIN = tuple(
+    value.strip()
+    for value in os.getenv(
+        "LIQUIPEDIA_IMPERSONATION_CHAIN", "chrome,chrome136,chrome131"
+    ).split(",")
+    if value.strip()
+)
+
+FALLBACK_RETRY_STATUSES = {403, 429, 503}
+CHALLENGE_BODY_MARKERS = [
+    "just a moment",
+    "checking your browser",
+    "attention required",
+    "cf-browser-verification",
+    "window._cf_chl_opt",
+    "please enable javascript and cookies",
+]
+
+
+def _dedupe_preserve_order(values):
+    seen = set()
+    result = []
+    for value in values:
+        normalized = (value or "").strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def build_impersonation_chain(primary=None, fallbacks=None):
+    return _dedupe_preserve_order([primary, *(fallbacks or [])])
+
+
+def detect_cloudflare_challenge(response, *, inspect_body=True):
+    if response is None:
+        return False
+
+    status_code = getattr(response, "status_code", None)
+    headers = getattr(response, "headers", {}) or {}
+
+    server = str(headers.get("Server") or "").lower()
+    cf_ray = headers.get("CF-RAY")
+    set_cookie = str(headers.get("Set-Cookie") or "").lower()
+
+    body_preview = ""
+    if inspect_body:
+        try:
+            body_preview = " ".join((response.text or "").split()).lower()
+        except Exception:
+            body_preview = ""
+
+    marker_hit = any(marker in body_preview for marker in CHALLENGE_BODY_MARKERS)
+    has_cf_headers = (
+        bool(cf_ray) or "cloudflare" in server or "cf_clearance" in set_cookie
+    )
+
+    if status_code in FALLBACK_RETRY_STATUSES:
+        return True
+
+    return marker_hit
+
+
+def is_retryable_response(response, *, inspect_body=True):
+    status_code = getattr(response, "status_code", None)
+    if status_code in FALLBACK_RETRY_STATUSES:
+        return True
+    return detect_cloudflare_challenge(response, inspect_body=inspect_body)
+
+
+def get_with_impersonation_fallback(
+    url,
+    *,
+    impersonate=None,
+    fallback_impersonations=None,
+    timeout=None,
+    validate_response: Callable | None = None,
+    **request_kwargs,
+):
+    impersonation_chain = build_impersonation_chain(
+        primary=impersonate,
+        fallbacks=fallback_impersonations,
+    )
+
+    if not impersonation_chain:
+        return requests.get(url, timeout=timeout, **request_kwargs)
+
+    last_response = None
+    last_exception = None
+
+    for current_impersonate in impersonation_chain:
+        try:
+            response = requests.get(
+                url,
+                impersonate=current_impersonate,
+                timeout=timeout,
+                **request_kwargs,
+            )
+        except Exception as exc:
+            last_exception = exc
+            continue
+
+        last_response = response
+        if validate_response is not None:
+            if validate_response(response):
+                return response
+            continue
+
+        inspect_body = not bool(request_kwargs.get("stream"))
+        if not is_retryable_response(response, inspect_body=inspect_body):
+            return response
+
+    if last_response is not None:
+        return last_response
+
+    if last_exception is not None:
+        raise last_exception
+
+    raise RuntimeError(f"Failed to fetch URL with impersonation fallback: {url}")
