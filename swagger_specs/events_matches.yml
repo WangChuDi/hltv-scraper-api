@@ -30,6 +30,12 @@ responses:
                 type: string
               slug:
                 type: string
+              url:
+                type: string
+              team1_name:
+                type: string
+              team2_name:
+                type: string
         total:
           type: integer
   500:

@@ -5,6 +5,10 @@ from urllib.parse import quote, urlparse
 from bs4 import BeautifulSoup
 from curl_cffi import requests
 
+from http_client import (
+    HLTV_IMPERSONATION_CHAIN,
+    get_with_impersonation_fallback,
+)
 from liquipedia_scraper import get_event_tier
 
 
@@ -80,7 +84,12 @@ def _build_event_result_from_search_entry(entry):
 
 def get_live_box_event():
     try:
-        resp = requests.get("https://www.hltv.org", impersonate="chrome142", timeout=10)
+        resp = get_with_impersonation_fallback(
+            "https://www.hltv.org",
+            impersonate="chrome142",
+            fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+            timeout=10,
+        )
         soup = BeautifulSoup(resp.content, "html.parser")
 
         live_box = soup.find("span", class_="live-box")
@@ -108,7 +117,12 @@ def get_hltv_event_metadata(event_url):
         if not event_path:
             return None
         full_url = f"https://www.hltv.org{event_path}"
-        resp = requests.get(full_url, impersonate="chrome142", timeout=10)
+        resp = get_with_impersonation_fallback(
+            full_url,
+            impersonate="chrome142",
+            fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+            timeout=10,
+        )
         soup = BeautifulSoup(resp.content, "html.parser")
 
         title = soup.find("h1", class_="event-hub-title")
@@ -204,7 +218,12 @@ def search_events(query):
         years.update(int(year) for year in re.findall(r"20\d{2}", query))
 
         search_url = f"https://www.hltv.org/search?term={quote(query)}"
-        search_resp = requests.get(search_url, impersonate="chrome124", timeout=10)
+        search_resp = get_with_impersonation_fallback(
+            search_url,
+            impersonate="chrome124",
+            fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+            timeout=10,
+        )
         if search_resp.status_code == 200:
             try:
                 search_payload = search_resp.json()
@@ -229,8 +248,11 @@ def search_events(query):
 
         all_links = []
 
-        resp = requests.get(
-            "https://www.hltv.org/events", impersonate="chrome124", timeout=10
+        resp = get_with_impersonation_fallback(
+            "https://www.hltv.org/events",
+            impersonate="chrome124",
+            fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+            timeout=10,
         )
         if resp.status_code == 200:
             all_links.extend(
@@ -239,8 +261,11 @@ def search_events(query):
 
         for year in sorted(years):
             archive_url = f"https://www.hltv.org/events/archive?startDate={year}-01-01&endDate={year}-12-31"
-            archive_resp = requests.get(
-                archive_url, impersonate="chrome124", timeout=10
+            archive_resp = get_with_impersonation_fallback(
+                archive_url,
+                impersonate="chrome124",
+                fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+                timeout=10,
             )
             if archive_resp.status_code == 200:
                 all_links.extend(
@@ -273,7 +298,12 @@ def get_event_with_grouped_events(event_url):
         if not event_path:
             return None
         full_url = f"https://www.hltv.org{event_path}"
-        resp = requests.get(full_url, impersonate="chrome142", timeout=10)
+        resp = get_with_impersonation_fallback(
+            full_url,
+            impersonate="chrome142",
+            fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+            timeout=10,
+        )
         soup = BeautifulSoup(resp.content, "html.parser")
 
         event_name = None

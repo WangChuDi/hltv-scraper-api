@@ -237,12 +237,58 @@ class TestRoutesEndpoints:
                     {
                         "id": "2391771",
                         "slug": "aurora-vs-the-mongolz-blast-open-rotterdam-2026",
+                        "team1_name": "Aurora",
+                        "team2_name": "The MongolZ",
                         "url": "https://www.hltv.org/matches/2391771/aurora-vs-the-mongolz-blast-open-rotterdam-2026",
                     },
                     {
                         "id": "2391770",
                         "slug": "the-mongolz-vs-spirit-blast-open-rotterdam-2026",
+                        "team1_name": "The MongolZ",
+                        "team2_name": "Spirit",
                         "url": "https://www.hltv.org/matches/2391770/the-mongolz-vs-spirit-blast-open-rotterdam-2026",
+                    },
+                ]
+
+    def test_event_matches_endpoint_extracts_team_names_from_scoreboard_text(
+        self, client, app
+    ):
+        results_html = """
+        <html><body>
+            <div class="results-holder">
+                <div class="result-con">
+                    <a href="/matches/2393046/astralis-vs-fut-pgl-bucharest-2026">Astralis 1 - 3 FUT bo5</a>
+                    <a href="/matches/2393045/3dmax-vs-the-mongolz-pgl-bucharest-2026">3DMAX 0 - 2 The MongolZ bo3</a>
+                </div>
+            </div>
+        </body></html>
+        """
+
+        with app.app_context():
+            with patch("curl_cffi.requests.get") as mock_get:
+                results_response = Mock()
+                results_response.status_code = 200
+                results_response.content = results_html.encode("utf-8")
+                mock_get.return_value = results_response
+
+                response = client.get("/api/v1/events/8048/pgl-bucharest-2026/matches")
+
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert data["matches"] == [
+                    {
+                        "id": "2393046",
+                        "slug": "astralis-vs-fut-pgl-bucharest-2026",
+                        "team1_name": "Astralis",
+                        "team2_name": "FUT",
+                        "url": "https://www.hltv.org/matches/2393046/astralis-vs-fut-pgl-bucharest-2026",
+                    },
+                    {
+                        "id": "2393045",
+                        "slug": "3dmax-vs-the-mongolz-pgl-bucharest-2026",
+                        "team1_name": "3DMAX",
+                        "team2_name": "The MongolZ",
+                        "url": "https://www.hltv.org/matches/2393045/3dmax-vs-the-mongolz-pgl-bucharest-2026",
                     },
                 ]
 
@@ -434,6 +480,10 @@ class TestSearchEvents:
 
         with app.app_context():
             with patch("hltv_event_search.requests.get") as mock_get:
+                search_response = Mock()
+                search_response.status_code = 200
+                search_response.json.return_value = []
+
                 events_response = Mock()
                 events_response.status_code = 200
                 events_response.content = events_html
@@ -442,7 +492,11 @@ class TestSearchEvents:
                 archive_response.status_code = 200
                 archive_response.content = archive_html
 
-                mock_get.side_effect = [events_response, archive_response]
+                mock_get.side_effect = [
+                    search_response,
+                    events_response,
+                    archive_response,
+                ]
 
                 from hltv_event_search import search_events
 
@@ -564,3 +618,61 @@ class TestSearchEvents:
             assert len(results) == 1
             assert results[0]["event_id"] == "8048"
             assert results[0]["url"] == "/events/8048/pgl-bucharest-2026"
+
+
+class TestFingerprintFallback:
+    def test_get_live_box_event_falls_back_to_secondary_impersonation(self):
+        blocked_response = Mock()
+        blocked_response.status_code = 403
+        blocked_response.headers = {"Server": "cloudflare", "CF-RAY": "abc"}
+        blocked_response.text = "Just a moment..."
+        blocked_response.content = b"<html><title>Just a moment...</title></html>"
+
+        success_response = Mock()
+        success_response.status_code = 200
+        success_response.headers = {}
+        success_response.text = ""
+        success_response.content = b"""<html><body>
+            <a href="/events/8242/iem-rio-2026"><span class="live-box">LIVE</span>IEM Rio 2026</a>
+        </body></html>"""
+
+        with patch(
+            "http_client.requests.get", side_effect=[blocked_response, success_response]
+        ) as mock_get:
+            from hltv_event_search import get_live_box_event
+
+            result = get_live_box_event()
+
+        assert result["event_id"] == "8242"
+        assert result["url"] == "/events/8242/iem-rio-2026"
+        assert mock_get.call_args_list[0].kwargs["impersonate"] == "chrome142"
+        assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome136"
+
+    def test_event_matches_endpoint_falls_back_to_secondary_impersonation(self, client):
+        blocked_response = Mock()
+        blocked_response.status_code = 403
+        blocked_response.headers = {"Server": "cloudflare", "CF-RAY": "abc"}
+        blocked_response.text = "Just a moment..."
+        blocked_response.content = b"<html><title>Just a moment...</title></html>"
+
+        success_response = Mock()
+        success_response.status_code = 200
+        success_response.headers = {}
+        success_response.text = ""
+        success_response.content = b"""<html><body>
+            <div class="results-holder"><div class="result-con">
+                <a href="/matches/2393046/astralis-vs-fut-pgl-bucharest-2026">Astralis 1 - 3 FUT bo5</a>
+            </div></div>
+        </body></html>"""
+
+        with patch(
+            "http_client.requests.get", side_effect=[blocked_response, success_response]
+        ) as mock_get:
+            response = client.get("/api/v1/events/8048/pgl-bucharest-2026/matches")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["total"] == 1
+        assert data["matches"][0]["id"] == "2393046"
+        assert mock_get.call_args_list[0].kwargs["impersonate"] == "chrome124"
+        assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome136"
