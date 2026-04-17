@@ -3,8 +3,11 @@ import scrapy
 from typing import Any, Generator
 import cloudscraper
 from scrapy.http.response.html import HtmlResponse
+from ..http_client import (
+    HLTV_IMPERSONATION_CHAIN,
+    get_with_impersonation_fallback,
+)
 from .parsers import ParsersFactory as PF
-from http_client import HLTV_IMPERSONATION_CHAIN, get_with_impersonation_fallback
 
 
 class HltvMatchSpider(scrapy.Spider):
@@ -15,7 +18,7 @@ class HltvMatchSpider(scrapy.Spider):
         self.start_urls = [f"https://www.hltv.org/matches/{match}"]
         super().__init__(**kwargs)
 
-    def start_requests(self) -> Generator[dict[str, None] | Request, Any, None]:
+    def start_requests(self) -> Generator[dict[str, object] | Request, Any, None]:
         for url in self.start_urls:
             try:
                 # Impersonate Safari 15.3 to bypass Cloudflare
@@ -43,7 +46,7 @@ class HltvMatchSpider(scrapy.Spider):
                     callback=self.parse,
                 )
 
-    def parse(self, response) -> Generator[dict[str, None], Any, None]:
+    def parse(self, response) -> Generator[dict[str, object], Any, None]:
         teams_box = PF.get_parser("match_teams_box").parse(
             response.css(".teamsBox"), response
         )

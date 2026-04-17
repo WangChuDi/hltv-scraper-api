@@ -1,5 +1,5 @@
 import os
-from typing import Callable
+from typing import Any, Callable
 
 from curl_cffi import requests
 
@@ -89,7 +89,7 @@ def get_with_impersonation_fallback(
     impersonate=None,
     fallback_impersonations=None,
     timeout=None,
-    validate_response: Callable | None = None,
+    validate_response: Callable[[Any], bool] | None = None,
     **request_kwargs,
 ):
     impersonation_chain = build_impersonation_chain(
