@@ -52,15 +52,30 @@ Returns event details including grouped events.
 
 ### Get Event Tier
 ```http
-GET /api/v1/events/tier?name=<event_name>
+GET /api/liquipedia/events/tier?name=<event_name>
 ```
 Returns event tier from Liquipedia (S-tier, A-tier, etc.).
 
 ### Get Ongoing Tournaments
 ```http
-GET /api/v1/events/ongoing
+GET /api/liquipedia/events/ongoing
 ```
 Returns ongoing S-tier tournaments from Liquipedia.
+
+### Get Completed Tournaments
+```http
+GET /api/liquipedia/events/completed
+```
+Returns recently completed tournaments from Liquipedia.
+
+### Get Liquipedia Ongoing Events Feed
+```http
+GET /api/liquipedia/results/ongoing-events
+```
+Returns ongoing tournament names tagged with `source=liquipedia`.
+
+> Legacy compatibility aliases remain available at `/api/v1/events/{tier,ongoing,completed}`
+> and `/api/v1/results/ongoing-events`.
 
 ## Teams
 
