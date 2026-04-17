@@ -11,6 +11,120 @@ from hltv_scraper.hltv_scraper.spiders.parsers.match_teams_box import (
 class TestRoutesEndpoints:
     """Tests for all API route endpoints."""
 
+    def test_liquipedia_events_ongoing_route(self, client, app):
+        with app.app_context():
+            with patch(
+                "liquipedia_scraper.get_ongoing_tournaments",
+                return_value=["IEM Rio 2026"],
+            ):
+                response = client.get("/api/liquipedia/events/ongoing")
+
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "tournaments": [{"name": "IEM Rio 2026"}],
+            "total": 1,
+        }
+
+    def test_liquipedia_events_ongoing_legacy_alias_matches_canonical(
+        self, client, app
+    ):
+        with app.app_context():
+            with patch(
+                "liquipedia_scraper.get_ongoing_tournaments",
+                return_value=["IEM Rio 2026"],
+            ):
+                canonical_response = client.get("/api/liquipedia/events/ongoing")
+                legacy_response = client.get("/api/v1/events/ongoing")
+
+        assert legacy_response.status_code == canonical_response.status_code
+        assert legacy_response.get_json() == canonical_response.get_json()
+
+    def test_liquipedia_events_completed_route(self, client, app):
+        with app.app_context():
+            with patch(
+                "liquipedia_scraper.get_completed_tournaments",
+                return_value=["ESL Pro League Season 23 Finals"],
+            ):
+                response = client.get("/api/liquipedia/events/completed")
+
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "tournaments": [{"name": "ESL Pro League Season 23 Finals"}],
+            "total": 1,
+        }
+
+    def test_liquipedia_events_completed_legacy_alias_matches_canonical(
+        self, client, app
+    ):
+        with app.app_context():
+            with patch(
+                "liquipedia_scraper.get_completed_tournaments",
+                return_value=["ESL Pro League Season 23 Finals"],
+            ):
+                canonical_response = client.get("/api/liquipedia/events/completed")
+                legacy_response = client.get("/api/v1/events/completed")
+
+        assert legacy_response.status_code == canonical_response.status_code
+        assert legacy_response.get_json() == canonical_response.get_json()
+
+    def test_liquipedia_events_tier_route(self, client, app):
+        with app.app_context():
+            with patch("liquipedia_scraper.get_event_tier", return_value="S"):
+                response = client.get(
+                    "/api/liquipedia/events/tier?name=IEM%20Rio%202026"
+                )
+
+        assert response.status_code == 200
+        assert response.get_json() == {"event_name": "IEM Rio 2026", "tier": "S"}
+
+    def test_liquipedia_events_tier_legacy_alias_matches_canonical(self, client, app):
+        with app.app_context():
+            with patch("liquipedia_scraper.get_event_tier", return_value="S"):
+                canonical_response = client.get(
+                    "/api/liquipedia/events/tier?name=IEM%20Rio%202026"
+                )
+                legacy_response = client.get(
+                    "/api/v1/events/tier?name=IEM%20Rio%202026"
+                )
+
+        assert legacy_response.status_code == canonical_response.status_code
+        assert legacy_response.get_json() == canonical_response.get_json()
+
+    def test_liquipedia_events_tier_validation_error(self, client):
+        response = client.get("/api/liquipedia/events/tier")
+
+        assert response.status_code == 400
+        assert response.get_json() == {
+            "error": "Event name parameter 'name' is required"
+        }
+
+    def test_liquipedia_results_ongoing_events_route(self, client, app):
+        with app.app_context():
+            with patch(
+                "routes.results.get_ongoing_tournaments",
+                return_value=["IEM Rio 2026"],
+            ):
+                response = client.get("/api/liquipedia/results/ongoing-events")
+
+        assert response.status_code == 200
+        assert response.get_json() == [{"name": "IEM Rio 2026", "source": "liquipedia"}]
+
+    def test_liquipedia_results_ongoing_events_legacy_alias_matches_canonical(
+        self, client, app
+    ):
+        with app.app_context():
+            with patch(
+                "routes.results.get_ongoing_tournaments",
+                return_value=["IEM Rio 2026"],
+            ):
+                canonical_response = client.get(
+                    "/api/liquipedia/results/ongoing-events"
+                )
+                legacy_response = client.get("/api/v1/results/ongoing-events")
+
+        assert legacy_response.status_code == canonical_response.status_code
+        assert legacy_response.get_json() == canonical_response.get_json()
+
     def test_health_endpoint_returns_ok(self, client):
         response = client.get("/health")
 

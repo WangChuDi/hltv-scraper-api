@@ -12,6 +12,9 @@ from http_client import HLTV_IMPERSONATION_CHAIN, get_with_impersonation_fallbac
 from hltv_event_search import search_events, get_event_with_grouped_events
 
 events_bp = Blueprint("events", __name__, url_prefix="/api/v1/events")
+liquipedia_events_bp = Blueprint(
+    "liquipedia_events", __name__, url_prefix="/api/liquipedia/events"
+)
 
 
 def _normalize_hltv_event_url(event_url: str) -> str | None:
@@ -189,9 +192,7 @@ def discover() -> Response | tuple[Response, Literal[500]]:
         return jsonify({"error": str(e)}), 500
 
 
-@events_bp.route("/tier", methods=["GET"])
-@swag_from("../swagger_specs/events_tier.yml")
-def get_tier() -> Response | tuple[Response, Literal[500]]:
+def _get_liquipedia_tier() -> Response | tuple[Response, Literal[500]]:
     """Get event tier from Liquipedia."""
     try:
         from liquipedia_scraper import get_event_tier
@@ -206,9 +207,18 @@ def get_tier() -> Response | tuple[Response, Literal[500]]:
         return jsonify({"error": str(e)}), 500
 
 
-@events_bp.route("/ongoing", methods=["GET"])
-@swag_from("../swagger_specs/events_ongoing.yml")
-def get_ongoing() -> Response | tuple[Response, Literal[500]]:
+@liquipedia_events_bp.route("/tier", methods=["GET"])
+@swag_from("../swagger_specs/events_tier.yml")
+def get_liquipedia_tier() -> Response | tuple[Response, Literal[500]]:
+    return _get_liquipedia_tier()
+
+
+@events_bp.route("/tier", methods=["GET"])
+def get_liquipedia_tier_legacy() -> Response | tuple[Response, Literal[500]]:
+    return _get_liquipedia_tier()
+
+
+def _get_liquipedia_ongoing() -> Response | tuple[Response, Literal[500]]:
     try:
         from liquipedia_scraper import get_ongoing_tournaments
 
@@ -219,9 +229,18 @@ def get_ongoing() -> Response | tuple[Response, Literal[500]]:
         return jsonify({"error": str(e)}), 500
 
 
-@events_bp.route("/completed", methods=["GET"])
-@swag_from("../swagger_specs/events_completed.yml")
-def get_completed() -> Response | tuple[Response, Literal[500]]:
+@liquipedia_events_bp.route("/ongoing", methods=["GET"])
+@swag_from("../swagger_specs/events_ongoing.yml")
+def get_liquipedia_ongoing() -> Response | tuple[Response, Literal[500]]:
+    return _get_liquipedia_ongoing()
+
+
+@events_bp.route("/ongoing", methods=["GET"])
+def get_liquipedia_ongoing_legacy() -> Response | tuple[Response, Literal[500]]:
+    return _get_liquipedia_ongoing()
+
+
+def _get_liquipedia_completed() -> Response | tuple[Response, Literal[500]]:
     """Get completed tournaments from Liquipedia."""
     try:
         from liquipedia_scraper import get_completed_tournaments
@@ -231,6 +250,17 @@ def get_completed() -> Response | tuple[Response, Literal[500]]:
         return jsonify({"tournaments": result, "total": len(result)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@liquipedia_events_bp.route("/completed", methods=["GET"])
+@swag_from("../swagger_specs/events_completed.yml")
+def get_liquipedia_completed() -> Response | tuple[Response, Literal[500]]:
+    return _get_liquipedia_completed()
+
+
+@events_bp.route("/completed", methods=["GET"])
+def get_liquipedia_completed_legacy() -> Response | tuple[Response, Literal[500]]:
+    return _get_liquipedia_completed()
 
 
 @events_bp.route("/details", methods=["GET"])

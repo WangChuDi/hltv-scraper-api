@@ -20,16 +20,20 @@ def create_app():
     from routes.matches import matches_bp
     from routes.news import news_bp
     from routes.results import results_bp
+    from routes.results import liquipedia_results_bp
     from routes.demos import demos_bp
     from routes.events import events_bp
+    from routes.events import liquipedia_events_bp
 
     app.register_blueprint(teams_bp)
     app.register_blueprint(players_bp)
     app.register_blueprint(matches_bp)
     app.register_blueprint(news_bp)
     app.register_blueprint(results_bp)
+    app.register_blueprint(liquipedia_results_bp)
     app.register_blueprint(demos_bp)
     app.register_blueprint(events_bp)
+    app.register_blueprint(liquipedia_events_bp)
 
     @app.get("/health")
     def health_check():
