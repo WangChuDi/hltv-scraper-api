@@ -145,14 +145,10 @@ def get_event_tier(event_name):
 def get_ongoing_tournaments():
     """Scrape ongoing tournaments from Liquipedia"""
     url = "https://liquipedia.net/counterstrike/Main_Page"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
 
     try:
         response = get_with_impersonation_fallback(
             url,
-            headers=headers,
             timeout=10,
             fallback_impersonations=LIQUIPEDIA_IMPERSONATION_CHAIN,
         )
