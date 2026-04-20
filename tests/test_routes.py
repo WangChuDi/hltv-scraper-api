@@ -209,6 +209,25 @@ class TestRoutesEndpoints:
             for signal in data["challenge_signals"]
         )
 
+    def test_demo_download_rejects_non_challenge_html_response(self, client, app):
+        upstream_response = Mock()
+        upstream_response.status_code = 200
+        upstream_response.headers = {
+            "Content-Type": "text/html; charset=UTF-8",
+        }
+        upstream_response.text = "<html><body>Access denied</body></html>"
+
+        with app.app_context():
+            with patch("routes.demos.requests.get", return_value=upstream_response):
+                response = client.get("/api/v1/download/demo/105805")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["error"] == "Failed to fetch demo: HLTV returned 200"
+        assert data["challenge_detected"] is False
+        assert data["challenge_signals"] == []
+        assert data["solver_attempted"] is False
+
     def test_demo_download_falls_back_to_env_sitekey(self, client, app):
         challenge_response = Mock()
         challenge_response.status_code = 403
@@ -593,7 +612,7 @@ class TestSearchEvents:
         </body></html>"""
 
         with app.app_context():
-            with patch("hltv_event_search.requests.get") as mock_get:
+            with patch("hltv_event_search.get_with_impersonation_fallback") as mock_get:
                 search_response = Mock()
                 search_response.status_code = 200
                 search_response.json.return_value = []
@@ -635,7 +654,7 @@ class TestSearchEvents:
         archive_html = b"""<html><body></body></html>"""
 
         with app.app_context():
-            with patch("hltv_event_search.requests.get") as mock_get:
+            with patch("hltv_event_search.get_with_impersonation_fallback") as mock_get:
                 search_response = Mock()
                 search_response.status_code = 200
                 search_response.json.return_value = []
@@ -688,7 +707,7 @@ class TestSearchEvents:
             }
         ]
 
-        with patch("hltv_event_search.requests.get") as mock_get:
+        with patch("hltv_event_search.get_with_impersonation_fallback") as mock_get:
             search_response = Mock()
             search_response.status_code = 200
             search_response.json.return_value = search_payload
@@ -710,7 +729,7 @@ class TestSearchEvents:
         </body></html>"""
         archive_html = b"""<html><body></body></html>"""
 
-        with patch("hltv_event_search.requests.get") as mock_get:
+        with patch("hltv_event_search.get_with_impersonation_fallback") as mock_get:
             search_response = Mock()
             search_response.status_code = 200
             search_response.json.return_value = []

@@ -54,6 +54,17 @@ def test_streaming_requests_do_not_inspect_response_body():
     assert result is response
 
 
+def test_detect_cloudflare_challenge_uses_cookie_headers_when_body_is_skipped():
+    response = Mock()
+    response.status_code = 200
+    response.headers = {
+        "Server": "cloudflare",
+        "Set-Cookie": "__cf_bm=abc123; path=/; HttpOnly",
+    }
+
+    assert detect_cloudflare_challenge(response, inspect_body=False) is True
+
+
 def test_returns_first_successful_response_without_fallback():
     response = Mock(status_code=200, headers={}, text="ok")
 

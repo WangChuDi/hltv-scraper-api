@@ -233,9 +233,9 @@ def _solve_turnstile_token(website_url, sitekey):
 
 
 def _request_hltv_demo(target_url, turnstile_token=None):
-    request_kwargs = {"impersonate": DEFAULT_HLTV_DEMO_IMPERSONATE, "stream": True}
+    headers = None
     if turnstile_token:
-        request_kwargs["headers"] = {
+        headers = {
             "cf-turnstile-response": turnstile_token,
             "x-turnstile-token": turnstile_token,
             "Referer": target_url,
@@ -246,7 +246,7 @@ def _request_hltv_demo(target_url, turnstile_token=None):
         impersonate=DEFAULT_HLTV_DEMO_IMPERSONATE,
         fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
         stream=True,
-        headers=request_kwargs.get("headers"),
+        headers=headers,
     )
 
 
@@ -313,26 +313,25 @@ def download_demo(demo_id: str):
 
         challenge_detected = False
         challenge_signals = []
-        headers = {}
         body_preview = ""
         should_enter_challenge_flow = False
 
         if upstream_resp.status_code != 200:
             should_enter_challenge_flow = True
-            headers, body_preview = _format_upstream_error_context(upstream_resp)
+            _, body_preview = _format_upstream_error_context(upstream_resp)
             challenge_detected, challenge_signals = _detect_cloudflare_challenge(
                 upstream_resp.status_code,
                 upstream_resp.headers,
                 body_preview,
             )
         elif _is_html_response(upstream_resp):
-            headers, body_preview = _format_upstream_error_context(upstream_resp)
+            should_enter_challenge_flow = True
+            _, body_preview = _format_upstream_error_context(upstream_resp)
             challenge_detected, challenge_signals = _detect_cloudflare_challenge(
                 upstream_resp.status_code,
                 upstream_resp.headers,
                 body_preview,
             )
-            should_enter_challenge_flow = challenge_detected
 
         if should_enter_challenge_flow:
             solver_attempted = False
@@ -381,9 +380,7 @@ def download_demo(demo_id: str):
                     final_body_preview,
                 )
             )
-            final_failed = upstream_resp.status_code != 200 or (
-                final_is_html and final_challenge_detected
-            )
+            final_failed = upstream_resp.status_code != 200 or final_is_html
 
             if final_failed:
                 logger.warning(
@@ -420,8 +417,10 @@ def download_demo(demo_id: str):
                 stream_exc,
             )
             retry_stream_resp = _request_hltv_demo(target_url)
-            if retry_stream_resp.status_code != 200:
-                headers, body_preview = _format_upstream_error_context(
+            if retry_stream_resp.status_code != 200 or _is_html_response(
+                retry_stream_resp
+            ):
+                _, body_preview = _format_upstream_error_context(
                     retry_stream_resp
                 )
                 challenge_detected, challenge_signals = _detect_cloudflare_challenge(

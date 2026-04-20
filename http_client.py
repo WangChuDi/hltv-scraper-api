@@ -66,14 +66,19 @@ def detect_cloudflare_challenge(response, *, inspect_body=True):
             body_preview = ""
 
     marker_hit = any(marker in body_preview for marker in CHALLENGE_BODY_MARKERS)
-    has_cf_headers = (
-        bool(cf_ray) or "cloudflare" in server or "cf_clearance" in set_cookie
+    has_cf_cookie_signal = any(
+        cookie_marker in set_cookie
+        for cookie_marker in ("cf_clearance", "__cf_bm", "cf_chl_")
     )
+    has_cf_headers = bool(cf_ray) or "cloudflare" in server or has_cf_cookie_signal
 
     if status_code in FALLBACK_RETRY_STATUSES:
         return True
 
-    return marker_hit
+    if inspect_body:
+        return marker_hit or (has_cf_headers and has_cf_cookie_signal)
+
+    return has_cf_headers and has_cf_cookie_signal
 
 
 def is_retryable_response(response, *, inspect_body=True):
