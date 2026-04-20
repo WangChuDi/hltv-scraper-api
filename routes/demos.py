@@ -270,9 +270,8 @@ def download_demo(demo_id: str):
     target_url = f"https://www.hltv.org/download/demo/{demo_id}"
 
     try:
-        # Use curl_cffi to bypass Cloudflare
-        # impersonate="safari15_3" worked for match details, using it here too
         # stream=True is critical for large file downloads
+        # impersonation is handled by the shared fallback helper
         upstream_resp = _request_hltv_demo(target_url)
 
         challenge_detected = False
