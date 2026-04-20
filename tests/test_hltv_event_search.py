@@ -4,6 +4,7 @@ from hltv_event_search import (
     get_event_with_grouped_events,
     get_hltv_event_metadata,
     get_live_box_event,
+    search_events,
 )
 
 
@@ -38,3 +39,31 @@ def test_get_event_with_grouped_events_returns_none_on_non_200_response():
         result = get_event_with_grouped_events("/events/123/test-event")
 
     assert result is None
+
+
+def test_search_events_falls_back_to_html_when_json_payload_shape_is_unexpected():
+    search_response = Mock()
+    search_response.status_code = 200
+    search_response.json.return_value = [123, {"events": "not-a-list"}]
+
+    events_response = Mock()
+    events_response.status_code = 200
+    events_response.content = (
+        b"<html><body>"
+        b'<a href="/events/8048/pgl-bucharest-2026"><div class="text-ellipsis">PGL Bucharest 2026</div></a>'
+        b"</body></html>"
+    )
+
+    archive_response = Mock()
+    archive_response.status_code = 200
+    archive_response.content = b"<html><body></body></html>"
+
+    with patch("hltv_event_search.get_with_impersonation_fallback") as mock_get:
+        mock_get.side_effect = [search_response, events_response, archive_response]
+
+        results = search_events("PGL Bucharest 2026")
+
+    assert len(results) == 1
+    assert results[0]["event_id"] == "8048"
+    assert results[0]["url"] == "/events/8048/pgl-bucharest-2026"
+    assert mock_get.call_count == 3

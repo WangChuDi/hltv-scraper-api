@@ -238,7 +238,14 @@ def search_events(query):
                 seen = set()
                 results = []
                 for group in search_payload if isinstance(search_payload, list) else []:
-                    for event in group.get("events", []):
+                    if not isinstance(group, dict):
+                        continue
+
+                    events = group.get("events", [])
+                    if not isinstance(events, list):
+                        continue
+
+                    for event in events:
                         event_result = _build_event_result_from_search_entry(event)
                         if not event_result or event_result["url"] in seen:
                             continue
