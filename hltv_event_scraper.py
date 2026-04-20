@@ -39,6 +39,9 @@ def get_event_details(event_url):
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )
+        if response.status_code != 200:
+            return None
+
         soup = BeautifulSoup(response.content, "html.parser")
 
         # Extract event name
