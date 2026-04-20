@@ -153,7 +153,10 @@ class TestRoutesEndpoints:
                 },
                 clear=False,
             ):
-                with patch("routes.demos.requests.get", return_value=upstream_response):
+                with patch(
+                    "routes.demos.get_with_impersonation_fallback",
+                    return_value=upstream_response,
+                ):
                     with caplog.at_level("WARNING"):
                         response = client.get("/api/v1/download/demo/105805")
 
@@ -196,7 +199,10 @@ class TestRoutesEndpoints:
         upstream_response.text = "<html><script>window._cf_chl_opt={};</script></html>"
 
         with app.app_context():
-            with patch("routes.demos.requests.get", return_value=upstream_response):
+            with patch(
+                "routes.demos.get_with_impersonation_fallback",
+                return_value=upstream_response,
+            ):
                 response = client.get("/api/v1/download/demo/105805")
 
         assert response.status_code == 200
@@ -218,7 +224,10 @@ class TestRoutesEndpoints:
         upstream_response.text = "<html><body>Access denied</body></html>"
 
         with app.app_context():
-            with patch("routes.demos.requests.get", return_value=upstream_response):
+            with patch(
+                "routes.demos.get_with_impersonation_fallback",
+                return_value=upstream_response,
+            ):
                 response = client.get("/api/v1/download/demo/105805")
 
         assert response.status_code == 200
@@ -251,7 +260,7 @@ class TestRoutesEndpoints:
         with app.app_context():
             with patch("routes.demos._solve_turnstile_token", return_value="token123"):
                 with patch(
-                    "routes.demos.requests.get",
+                    "routes.demos.get_with_impersonation_fallback",
                     side_effect=[challenge_response, download_response],
                 ) as mock_get:
                     with patch.dict(
@@ -279,7 +288,10 @@ class TestRoutesEndpoints:
         )
 
         with app.app_context():
-            with patch("routes.demos.requests.get", return_value=challenge_response):
+            with patch(
+                "routes.demos.get_with_impersonation_fallback",
+                return_value=challenge_response,
+            ):
                 with patch.dict(
                     "os.environ",
                     {
@@ -308,7 +320,8 @@ class TestRoutesEndpoints:
         with app.app_context():
             with patch("routes.demos.DEFAULT_HLTV_DEMO_IMPERSONATE", "chrome124"):
                 with patch(
-                    "routes.demos.requests.get", return_value=upstream_response
+                    "routes.demos.get_with_impersonation_fallback",
+                    return_value=upstream_response,
                 ) as mock_get:
                     response = client.get("/api/v1/download/demo/105805")
 

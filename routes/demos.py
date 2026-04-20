@@ -7,28 +7,19 @@ import time
 from flask import Blueprint, Response, stream_with_context
 from curl_cffi import requests
 
-from http_client import HLTV_IMPERSONATION_CHAIN, get_with_impersonation_fallback
+from http_client import (
+    HLTV_IMPERSONATION_CHAIN,
+    detect_cloudflare_challenge,
+    get_with_impersonation_fallback,
+)
 
 demos_bp = Blueprint("demos", __name__, url_prefix="/api/v1/download")
 logger = logging.getLogger(__name__)
 
-CF_CHALLENGE_STATUS_CODES = {403, 429, 503}
-CF_CHALLENGE_BODY_MARKERS = [
-    "just a moment",
-    "checking your browser",
-    "attention required",
-    "cf-browser-verification",
+DEMO_CHALLENGE_BODY_MARKERS = (
     "challenge-platform",
     "cdn-cgi/challenge-platform",
-    "window._cf_chl_opt",
-    "please enable javascript and cookies",
-]
-CF_CHALLENGE_STRONG_MARKERS = {
-    "cf-browser-verification",
-    "challenge-platform",
-    "cdn-cgi/challenge-platform",
-    "window._cf_chl_opt",
-}
+)
 DEFAULT_HLTV_DEMO_IMPERSONATE = (
     os.getenv("HLTV_DEMO_IMPERSONATE", "chrome136").strip() or "chrome136"
 )
@@ -70,45 +61,13 @@ def _format_upstream_error_context(upstream_resp):
     return headers, body_preview
 
 
-def _detect_cloudflare_challenge(status_code, headers, body_preview):
-    signals = []
-
-    if status_code in CF_CHALLENGE_STATUS_CODES:
-        signals.append(f"status:{status_code}")
-
-    cf_ray = headers.get("CF-RAY")
-    if cf_ray:
-        signals.append("header:CF-RAY")
-
-    server = (headers.get("Server") or "").lower()
-    if "cloudflare" in server:
-        signals.append("header:Server=cloudflare")
-
-    set_cookie = (headers.get("Set-Cookie") or "").lower()
-    if "cf_clearance" in set_cookie:
-        signals.append("header:Set-Cookie=cf_clearance")
-
-    body_lower = (body_preview or "").lower()
-    marker_hits = []
-    for marker in CF_CHALLENGE_BODY_MARKERS:
-        if marker in body_lower:
-            marker_hits.append(marker)
-            signals.append(f"body:{marker}")
-
-    has_hard_header = bool(cf_ray) or "cf_clearance" in set_cookie
-    has_cf_fingerprint = has_hard_header or "cloudflare" in server
-    strong_marker_hit = any(
-        marker in CF_CHALLENGE_STRONG_MARKERS for marker in marker_hits
+def _detect_cloudflare_challenge(upstream_resp):
+    return detect_cloudflare_challenge(
+        upstream_resp,
+        inspect_body=True,
+        extra_body_markers=DEMO_CHALLENGE_BODY_MARKERS,
+        return_signals=True,
     )
-    is_challenge = (
-        (
-            status_code in CF_CHALLENGE_STATUS_CODES
-            and (has_cf_fingerprint or bool(marker_hits))
-        )
-        or strong_marker_hit
-        or (has_cf_fingerprint and bool(marker_hits))
-    )
-    return is_challenge, signals
 
 
 def _normalize_ohmycaptcha_base_url(raw_url):
@@ -313,25 +272,14 @@ def download_demo(demo_id: str):
 
         challenge_detected = False
         challenge_signals = []
-        body_preview = ""
         should_enter_challenge_flow = False
 
         if upstream_resp.status_code != 200:
             should_enter_challenge_flow = True
-            _, body_preview = _format_upstream_error_context(upstream_resp)
-            challenge_detected, challenge_signals = _detect_cloudflare_challenge(
-                upstream_resp.status_code,
-                upstream_resp.headers,
-                body_preview,
-            )
+            challenge_detected, challenge_signals = _detect_cloudflare_challenge(upstream_resp)
         elif _is_html_response(upstream_resp):
             should_enter_challenge_flow = True
-            _, body_preview = _format_upstream_error_context(upstream_resp)
-            challenge_detected, challenge_signals = _detect_cloudflare_challenge(
-                upstream_resp.status_code,
-                upstream_resp.headers,
-                body_preview,
-            )
+            challenge_detected, challenge_signals = _detect_cloudflare_challenge(upstream_resp)
 
         if should_enter_challenge_flow:
             solver_attempted = False
@@ -373,12 +321,8 @@ def download_demo(demo_id: str):
             final_headers, final_body_preview = _format_upstream_error_context(
                 upstream_resp
             )
-            final_challenge_detected, final_challenge_signals = (
-                _detect_cloudflare_challenge(
-                    upstream_resp.status_code,
-                    upstream_resp.headers,
-                    final_body_preview,
-                )
+            final_challenge_detected, final_challenge_signals = _detect_cloudflare_challenge(
+                upstream_resp
             )
             final_failed = upstream_resp.status_code != 200 or final_is_html
 
@@ -420,13 +364,8 @@ def download_demo(demo_id: str):
             if retry_stream_resp.status_code != 200 or _is_html_response(
                 retry_stream_resp
             ):
-                _, body_preview = _format_upstream_error_context(
-                    retry_stream_resp
-                )
                 challenge_detected, challenge_signals = _detect_cloudflare_challenge(
-                    retry_stream_resp.status_code,
-                    retry_stream_resp.headers,
-                    body_preview,
+                    retry_stream_resp
                 )
                 payload = {
                     "error": f"Failed to fetch demo after stream retry: HLTV returned {retry_stream_resp.status_code}",
