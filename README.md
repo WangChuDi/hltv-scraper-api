@@ -66,7 +66,7 @@ Returns ongoing S-tier tournaments from Liquipedia.
 ```http
 GET /api/liquipedia/events/completed
 ```
-Returns recently completed tournaments from Liquipedia.
+Returns a static fallback list of recently completed tournaments (not live Liquipedia data).
 
 ### Get Liquipedia Ongoing Events Feed
 ```http
