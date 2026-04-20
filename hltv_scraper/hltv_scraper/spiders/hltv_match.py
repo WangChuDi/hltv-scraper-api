@@ -18,7 +18,7 @@ class HltvMatchSpider(scrapy.Spider):
         self.start_urls = [f"https://www.hltv.org/matches/{match}"]
         super().__init__(**kwargs)
 
-    def start_requests(self) -> Generator[dict[str, object] | scrapy.Request, Any, None]:
+    def start_requests(self) -> Generator[dict[str, object], Any, None]:
         for url in self.start_urls:
             try:
                 # Impersonate Safari 15.3 to bypass Cloudflare
@@ -28,10 +28,11 @@ class HltvMatchSpider(scrapy.Spider):
                     fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
                 )
 
-                if response_data.status_code == 403:
+                if response_data.status_code != 200:
                     self.logger.error(
-                        f"Error fetching {url}: 403 Forbidden (Cloudflare block)"
+                        f"Error fetching {url}: upstream returned {response_data.status_code}"
                     )
+                    continue
 
                 response = HtmlResponse(
                     url=url, body=response_data.content, encoding="utf-8"
@@ -40,11 +41,7 @@ class HltvMatchSpider(scrapy.Spider):
                 yield from self.parse(response)
             except Exception as e:
                 self.logger.error(f"Error fetching {url}: {e}")
-                # Fallback to standard request if curl_cffi completely fails (unlikely to help if CF blocked)
-                yield scrapy.Request(
-                    url=url,
-                    callback=self.parse,
-                )
+                continue
 
     def parse(self, response) -> Generator[dict[str, object], Any, None]:
         teams_box = PF.get_parser("match_teams_box").parse(
