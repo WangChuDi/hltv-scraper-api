@@ -29,6 +29,7 @@ CHALLENGE_BODY_MARKERS = [
     "window._cf_chl_opt",
     "please enable javascript and cookies",
 ]
+CHALLENGE_COOKIE_MARKERS = ("cf_clearance", "__cf_bm", "cf_chl_")
 
 
 def _dedupe_preserve_order(values):
@@ -47,9 +48,15 @@ def build_impersonation_chain(primary=None, fallbacks=None):
     return _dedupe_preserve_order([primary, *(fallbacks or [])])
 
 
-def detect_cloudflare_challenge(response, *, inspect_body=True):
+def detect_cloudflare_challenge(
+    response,
+    *,
+    inspect_body=True,
+    extra_body_markers=None,
+    return_signals=False,
+):
     if response is None:
-        return False
+        return (False, []) if return_signals else False
 
     status_code = getattr(response, "status_code", None)
     headers = getattr(response, "headers", {}) or {}
@@ -57,6 +64,15 @@ def detect_cloudflare_challenge(response, *, inspect_body=True):
     server = str(headers.get("Server") or "").lower()
     cf_ray = headers.get("CF-RAY")
     set_cookie = str(headers.get("Set-Cookie") or "").lower()
+    body_markers = [*CHALLENGE_BODY_MARKERS, *(extra_body_markers or [])]
+    signals = []
+
+    if status_code in FALLBACK_RETRY_STATUSES:
+        signals.append(f"status:{status_code}")
+    if cf_ray:
+        signals.append("header:CF-RAY")
+    if "cloudflare" in server:
+        signals.append("header:Server=cloudflare")
 
     body_preview = ""
     if inspect_body:
@@ -65,20 +81,35 @@ def detect_cloudflare_challenge(response, *, inspect_body=True):
         except Exception:
             body_preview = ""
 
-    marker_hit = any(marker in body_preview for marker in CHALLENGE_BODY_MARKERS)
+    marker_hits = [marker for marker in body_markers if marker in body_preview]
+    for marker in marker_hits:
+        signals.append(f"body:{marker}")
+
     has_cf_cookie_signal = any(
-        cookie_marker in set_cookie
-        for cookie_marker in ("cf_clearance", "__cf_bm", "cf_chl_")
+        cookie_marker in set_cookie for cookie_marker in CHALLENGE_COOKIE_MARKERS
     )
+    if has_cf_cookie_signal:
+        if "cf_clearance" in set_cookie:
+            signals.append("header:Set-Cookie=cf_clearance")
+        elif "__cf_bm" in set_cookie:
+            signals.append("header:Set-Cookie=__cf_bm")
+        else:
+            signals.append("header:Set-Cookie=cf_chl_")
+
     has_cf_headers = bool(cf_ray) or "cloudflare" in server or has_cf_cookie_signal
 
     if status_code in FALLBACK_RETRY_STATUSES:
-        return True
+        detected = True
+    elif inspect_body:
+        detected = bool(marker_hits) or (has_cf_headers and has_cf_cookie_signal)
+    else:
+        detected = has_cf_headers and has_cf_cookie_signal
 
-    if inspect_body:
-        return marker_hit or (has_cf_headers and has_cf_cookie_signal)
+    if return_signals:
+        deduped_signals = list(dict.fromkeys(signals))
+        return detected, deduped_signals
 
-    return has_cf_headers and has_cf_cookie_signal
+    return detected
 
 
 def is_retryable_response(response, *, inspect_body=True):

@@ -65,6 +65,23 @@ def test_detect_cloudflare_challenge_uses_cookie_headers_when_body_is_skipped():
     assert detect_cloudflare_challenge(response, inspect_body=False) is True
 
 
+def test_detect_cloudflare_challenge_can_return_signals_with_extra_markers():
+    response = Mock()
+    response.status_code = 200
+    response.headers = {"Server": "cloudflare"}
+    response.text = "<html><body>challenge-platform</body></html>"
+
+    detected, signals = detect_cloudflare_challenge(
+        response,
+        extra_body_markers=["challenge-platform"],
+        return_signals=True,
+    )
+
+    assert detected is True
+    assert "header:Server=cloudflare" in signals
+    assert "body:challenge-platform" in signals
+
+
 def test_returns_first_successful_response_without_fallback():
     response = Mock(status_code=200, headers={}, text="ok")
 
