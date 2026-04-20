@@ -186,6 +186,8 @@ class TestRoutesEndpoints:
         assert "demo_id=105805" in caplog.text
         assert "status=403" in caplog.text
         assert "CF-RAY" in caplog.text
+        assert "cf_clearance=<redacted>" in caplog.text
+        assert "very-long-cookie-value" not in caplog.text
         assert "body_preview" in caplog.text
         assert "Just a moment..." in caplog.text
 

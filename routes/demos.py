@@ -46,8 +46,13 @@ def _format_upstream_error_context(upstream_resp):
     for header in interesting_headers:
         value = upstream_resp.headers.get(header)
         if value:
-            if header == "Set-Cookie" and len(value) > 200:
-                value = value[:200] + "..."
+            if header == "Set-Cookie":
+                first_cookie = value.split(";", 1)[0]
+                if "=" in first_cookie:
+                    cookie_name = first_cookie.split("=", 1)[0].strip()
+                    value = f"{cookie_name}=<redacted>"
+                else:
+                    value = "<redacted>"
             headers[header] = value
 
     try:
