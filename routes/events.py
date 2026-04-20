@@ -160,7 +160,7 @@ def event_matches(event_id: int, slug: str) -> Response | tuple[Response, Litera
 
 @events_bp.route("/search", methods=["GET"])
 @swag_from("../swagger_specs/events_search.yml")
-def search() -> Response | tuple[Response, Literal[500]]:
+def search() -> Response | tuple[Response, Literal[400]] | tuple[Response, Literal[500]]:
     """Search for events by name."""
     try:
         query = request.args.get("q", "")
@@ -191,7 +191,7 @@ def discover() -> Response | tuple[Response, Literal[500]]:
         return jsonify({"error": str(e)}), 500
 
 
-def _get_liquipedia_tier() -> Response | tuple[Response, Literal[500]]:
+def _get_liquipedia_tier() -> Response | tuple[Response, Literal[400]] | tuple[Response, Literal[500]]:
     """Get event tier from Liquipedia."""
     try:
         from liquipedia_scraper import get_event_tier
@@ -208,12 +208,12 @@ def _get_liquipedia_tier() -> Response | tuple[Response, Literal[500]]:
 
 @liquipedia_events_bp.route("/tier", methods=["GET"])
 @swag_from("../swagger_specs/events_tier.yml")
-def get_liquipedia_tier() -> Response | tuple[Response, Literal[500]]:
+def get_liquipedia_tier() -> Response | tuple[Response, Literal[400]] | tuple[Response, Literal[500]]:
     return _get_liquipedia_tier()
 
 
 @events_bp.route("/tier", methods=["GET"])
-def get_liquipedia_tier_legacy() -> Response | tuple[Response, Literal[500]]:
+def get_liquipedia_tier_legacy() -> Response | tuple[Response, Literal[400]] | tuple[Response, Literal[500]]:
     return _get_liquipedia_tier()
 
 
