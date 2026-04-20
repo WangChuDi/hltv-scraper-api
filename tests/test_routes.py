@@ -440,6 +440,47 @@ class TestRoutesEndpoints:
                     },
                 ]
 
+    def test_event_matches_endpoint_preserves_upstream_failure_status(self, client, app):
+        results_response = Mock()
+        results_response.status_code = 503
+        results_response.content = b"<html><body>blocked</body></html>"
+
+        event_response = Mock()
+        event_response.status_code = 418
+        event_response.content = b"<html><body>blocked</body></html>"
+
+        with app.app_context():
+            with patch(
+                "routes.events.get_with_impersonation_fallback",
+                side_effect=[results_response, event_response],
+            ):
+                response = client.get(
+                    "/api/v1/events/8048/pgl-bucharest-2026/matches"
+                )
+
+        assert response.status_code == 418
+        assert response.get_json() == {"error": "Failed to fetch event page: 418"}
+
+    def test_event_details_endpoint_requires_url(self, client):
+        response = client.get("/api/v1/events/details")
+
+        assert response.status_code == 400
+        assert response.get_json() == {
+            "error": "Event URL parameter 'url' is required"
+        }
+
+    def test_event_details_endpoint_returns_not_found_when_fetch_fails(
+        self, client, app
+    ):
+        with app.app_context():
+            with patch("hltv_event_scraper.get_event_details", return_value=None):
+                response = client.get(
+                    "/api/v1/events/details?url=/events/8048/pgl-bucharest-2026"
+                )
+
+        assert response.status_code == 404
+        assert response.get_json() == {"error": "Failed to fetch event details"}
+
     def test_match_stage_parser_extracts_stage_from_preformatted_text(self):
         html = b"""
         <html><body>

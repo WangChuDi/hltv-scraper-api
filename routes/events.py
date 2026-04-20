@@ -73,7 +73,7 @@ def events() -> Response | tuple[Response, Literal[500]]:
 
 @events_bp.route("/<int:event_id>/<slug>/matches", methods=["GET"])
 @swag_from("../swagger_specs/events_matches.yml")
-def event_matches(event_id: int, slug: str) -> Response | tuple[Response, Literal[500]]:
+def event_matches(event_id: int, slug: str) -> Response | tuple[Response, int]:
     """Get all matches for a specific event."""
     try:
         from bs4 import BeautifulSoup
@@ -264,7 +264,7 @@ def get_liquipedia_completed_legacy() -> Response | tuple[Response, Literal[500]
 
 @events_bp.route("/details", methods=["GET"])
 @swag_from("../swagger_specs/events_details.yml")
-def get_details() -> Response | tuple[Response, Literal[500]]:
+def get_details() -> Response | tuple[Response, Literal[400]] | tuple[Response, Literal[404]] | tuple[Response, Literal[500]]:
     """Get event details including grouped events."""
     try:
         from hltv_event_scraper import get_event_details
