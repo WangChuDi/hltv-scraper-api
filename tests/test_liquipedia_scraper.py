@@ -60,3 +60,16 @@ def test_get_ongoing_tournaments_returns_empty_when_markers_missing():
         tournaments = get_ongoing_tournaments()
 
     assert tournaments == []
+
+
+def test_get_ongoing_tournaments_returns_empty_on_non_200_response():
+    response = Mock()
+    response.status_code = 403
+    response.content = b"<html><body>Blocked by upstream</body></html>"
+
+    with patch(
+        "liquipedia_scraper.get_with_impersonation_fallback", return_value=response
+    ):
+        tournaments = get_ongoing_tournaments()
+
+    assert tournaments == []

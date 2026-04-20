@@ -152,6 +152,9 @@ def get_ongoing_tournaments():
             timeout=10,
             fallback_impersonations=LIQUIPEDIA_IMPERSONATION_CHAIN,
         )
+        if response.status_code != 200:
+            return []
+
         soup = BeautifulSoup(response.content, "html.parser")
 
         # Get all text and find the Ongoing section
