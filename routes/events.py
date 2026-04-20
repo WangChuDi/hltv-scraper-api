@@ -175,7 +175,7 @@ def search() -> Response | tuple[Response, Literal[400]] | tuple[Response, Liter
 
 @events_bp.route("/discover", methods=["GET"])
 @swag_from("../swagger_specs/events_discover.yml")
-def discover() -> Response | tuple[Response, Literal[500]]:
+def discover() -> Response | tuple[Response, Literal[400]] | tuple[Response, Literal[404]] | tuple[Response, Literal[500]]:
     """Discover event and all its grouped events."""
     try:
         event_url = _normalize_hltv_event_url(request.args.get("url", ""))
