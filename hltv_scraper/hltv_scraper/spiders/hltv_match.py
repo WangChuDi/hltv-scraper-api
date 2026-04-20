@@ -1,8 +1,8 @@
-from flask import Request
-import scrapy
 from typing import Any, Generator
-import cloudscraper
+
+import scrapy
 from scrapy.http.response.html import HtmlResponse
+
 from ..http_client import (
     HLTV_IMPERSONATION_CHAIN,
     get_with_impersonation_fallback,
@@ -18,7 +18,7 @@ class HltvMatchSpider(scrapy.Spider):
         self.start_urls = [f"https://www.hltv.org/matches/{match}"]
         super().__init__(**kwargs)
 
-    def start_requests(self) -> Generator[dict[str, object] | Request, Any, None]:
+    def start_requests(self) -> Generator[dict[str, object] | scrapy.Request, Any, None]:
         for url in self.start_urls:
             try:
                 # Impersonate Safari 15.3 to bypass Cloudflare

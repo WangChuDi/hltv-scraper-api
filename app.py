@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from flask import Flask
@@ -13,7 +12,7 @@ def create_app():
 
     app.json.sort_keys = False  # type: ignore
 
-    swagger = Swagger(app)
+    Swagger(app)
 
     from routes.teams import teams_bp
     from routes.players import players_bp
