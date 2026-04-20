@@ -3,7 +3,6 @@ import re
 from urllib.parse import quote, urlparse
 
 from bs4 import BeautifulSoup
-from curl_cffi import requests
 
 from http_client import (
     HLTV_IMPERSONATION_CHAIN,

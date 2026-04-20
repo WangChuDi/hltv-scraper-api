@@ -1,13 +1,12 @@
 import re
 from typing import Literal
 from urllib.parse import urlparse
+
 from flask import Blueprint, Response, jsonify, request
 from flasgger import swag_from
 
 from hltv_scraper import HLTVScraper
-import sys
 
-sys.path.append("..")
 from http_client import HLTV_IMPERSONATION_CHAIN, get_with_impersonation_fallback
 from hltv_event_search import search_events, get_event_with_grouped_events
 
