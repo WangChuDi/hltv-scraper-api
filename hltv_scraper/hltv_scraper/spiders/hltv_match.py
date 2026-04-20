@@ -21,7 +21,7 @@ class HltvMatchSpider(scrapy.Spider):
     def start_requests(self) -> Generator[dict[str, object], Any, None]:
         for url in self.start_urls:
             try:
-                # Impersonate Safari 15.3 to bypass Cloudflare
+                # Use the shared impersonation fallback chain to bypass Cloudflare
                 response_data = get_with_impersonation_fallback(
                     url,
                     impersonate="chrome142",
