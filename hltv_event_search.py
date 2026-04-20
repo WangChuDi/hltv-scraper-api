@@ -89,6 +89,9 @@ def get_live_box_event():
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )
+        if resp.status_code != 200:
+            return None
+
         soup = BeautifulSoup(resp.content, "html.parser")
 
         live_box = soup.find("span", class_="live-box")
@@ -122,6 +125,9 @@ def get_hltv_event_metadata(event_url):
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )
+        if resp.status_code != 200:
+            return None
+
         soup = BeautifulSoup(resp.content, "html.parser")
 
         title = soup.find("h1", class_="event-hub-title")
@@ -303,6 +309,9 @@ def get_event_with_grouped_events(event_url):
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )
+        if resp.status_code != 200:
+            return None
+
         soup = BeautifulSoup(resp.content, "html.parser")
 
         event_name = None
