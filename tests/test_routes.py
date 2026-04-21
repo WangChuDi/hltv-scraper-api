@@ -9,6 +9,12 @@ from hltv_scraper.hltv_scraper.spiders.parsers.match_teams_box import MatchTeams
 class TestRoutesEndpoints:
     """Tests for all API route endpoints."""
 
+    def test_health_endpoint(self, client):
+        response = client.get('/health')
+
+        assert response.status_code == 200
+        assert response.get_json() == {'status': 'ok'}
+
     def test_event_matches_endpoint_prefers_results_page_links(self, client, app):
         results_html = '''
         <html><body>

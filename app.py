@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flasgger import Swagger
 
 def create_app():
@@ -7,6 +7,10 @@ def create_app():
     app.json.sort_keys = False # type: ignore
 
     swagger = Swagger(app)
+
+    @app.get('/health')
+    def health():
+        return jsonify({'status': 'ok'}), 200
 
     from routes.teams import teams_bp
     from routes.players import players_bp
