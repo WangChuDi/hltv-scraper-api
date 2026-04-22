@@ -481,6 +481,36 @@ class TestRoutesEndpoints:
         assert response.status_code == 404
         assert response.get_json() == {"error": "Failed to fetch event details"}
 
+    def test_event_resolve_endpoint_returns_event(self, client, app):
+        with app.app_context():
+            with patch(
+                "routes.events.find_event_by_id",
+                return_value={
+                    "event_id": "8048",
+                    "name": "PGL Bucharest 2026",
+                    "slug": "pgl-bucharest-2026",
+                    "url": "/events/8048/pgl-bucharest-2026",
+                },
+            ) as mock_find:
+                response = client.get("/api/v1/events/8048/resolve")
+
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "event_id": "8048",
+            "name": "PGL Bucharest 2026",
+            "slug": "pgl-bucharest-2026",
+            "url": "/events/8048/pgl-bucharest-2026",
+        }
+        mock_find.assert_called_once_with(8048)
+
+    def test_event_resolve_endpoint_returns_404_when_not_found(self, client, app):
+        with app.app_context():
+            with patch("routes.events.find_event_by_id", return_value=None):
+                response = client.get("/api/v1/events/999999/resolve")
+
+        assert response.status_code == 404
+        assert response.get_json() == {"error": "Event 999999 not found"}
+
     def test_match_stage_parser_extracts_stage_from_preformatted_text(self):
         html = b"""
         <html><body>

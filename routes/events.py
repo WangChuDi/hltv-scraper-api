@@ -8,7 +8,11 @@ from flasgger import swag_from
 from hltv_scraper import HLTVScraper
 
 from http_client import HLTV_IMPERSONATION_CHAIN, get_with_impersonation_fallback
-from hltv_event_search import search_events, get_event_with_grouped_events
+from hltv_event_search import (
+    find_event_by_id,
+    get_event_with_grouped_events,
+    search_events,
+)
 
 events_bp = Blueprint("events", __name__, url_prefix="/api/v1/events")
 liquipedia_events_bp = Blueprint(
@@ -169,6 +173,20 @@ def search() -> Response | tuple[Response, Literal[400]] | tuple[Response, Liter
 
         results = search_events(query)
         return jsonify({"query": query, "results": results, "total": len(results)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@events_bp.route("/<int:event_id>/resolve", methods=["GET"])
+@swag_from("../swagger_specs/events_resolve.yml")
+def resolve(event_id: int) -> Response | tuple[Response, Literal[404]] | tuple[Response, Literal[500]]:
+    """Resolve event by ID to canonical HLTV event path."""
+    try:
+        result = find_event_by_id(event_id)
+        if not result:
+            return jsonify({"error": f"Event {event_id} not found"}), 404
+
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
