@@ -1,5 +1,6 @@
 import datetime
 import re
+from collections import OrderedDict
 from urllib.parse import quote, urlparse
 
 from bs4 import BeautifulSoup
@@ -75,10 +76,135 @@ def _build_event_result_from_search_entry(entry):
     if not isinstance(entry, dict):
         return None
 
-    return _build_event_result(
-        entry.get("location") or entry.get("eventMatchesLocation"),
-        entry.get("name"),
+    location = (
+        entry.get("location")
+        or entry.get("link")
+        or entry.get("url")
     )
+    normalized_location = _normalize_hltv_event_url(location)
+
+    return _build_event_result(
+        normalized_location,
+        entry.get("name") or entry.get("title"),
+    )
+
+
+def _collect_event_links(soup):
+    links = []
+    for a in soup.find_all("a", href=True):
+        href = a.get("href")
+        if (
+            not isinstance(href, str)
+            or not href.startswith("/events/")
+            or href == "/events/archive"
+        ):
+            continue
+        title_node = a.select_one("div.text-ellipsis")
+        text = (
+            title_node.get_text(" ", strip=True)
+            if title_node
+            else a.get_text(" ", strip=True)
+        )
+        if text:
+            links.append((href, text))
+    return links
+
+
+def _matches_query(slug, text, query_parts):
+    haystack = f"{slug.lower()} {text.lower()}"
+    return all(part in haystack for part in query_parts)
+
+
+def _iter_search_event_entries(search_payload):
+    if isinstance(search_payload, dict):
+        direct_events = search_payload.get("events")
+        if isinstance(direct_events, list):
+            for event in direct_events:
+                if isinstance(event, dict):
+                    yield event
+            return
+
+        payload_iterable = search_payload.values()
+    elif isinstance(search_payload, list):
+        payload_iterable = search_payload
+    else:
+        return
+
+    for group in payload_iterable:
+        if not isinstance(group, dict):
+            continue
+
+        events = group.get("events")
+        if isinstance(events, list):
+            for event in events:
+                if isinstance(event, dict):
+                    yield event
+            continue
+
+        if any(key in group for key in ("id", "location", "link", "url")):
+            yield group
+
+
+def _search_events_from_payload(search_payload, query_parts):
+    seen = set()
+    results = []
+
+    for event in _iter_search_event_entries(search_payload):
+        event_result = _build_event_result_from_search_entry(event)
+        if not event_result or event_result["url"] in seen:
+            continue
+        if _matches_query(event_result["slug"], event_result["name"], query_parts):
+            seen.add(event_result["url"])
+            results.append(event_result)
+
+    return results
+
+
+def _fetch_archive_links_for_year(year, offset=0):
+    archive_url = (
+        f"https://www.hltv.org/events/archive?startDate={year}-01-01&endDate={year}-12-31"
+        f"&offset={offset}"
+    )
+    archive_resp = get_with_impersonation_fallback(
+        archive_url,
+        impersonate="chrome124",
+        fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+        timeout=10,
+    )
+    if archive_resp.status_code != 200:
+        return []
+    return _collect_event_links(BeautifulSoup(archive_resp.content, "html.parser"))
+
+
+def _iter_archive_links_for_year(year, *, stop_after_short_page=False):
+    offset = 0
+    while True:
+        archive_links = _fetch_archive_links_for_year(year, offset)
+        if not archive_links:
+            break
+        for link in archive_links:
+            yield link
+        if stop_after_short_page and len(archive_links) < 50:
+            break
+        offset += 50
+
+
+_EVENT_BY_ID_CACHE = OrderedDict()
+_EVENT_BY_ID_CACHE_LIMIT = 128
+
+
+def _get_cached_event_by_id(event_id_str):
+    cached_event = _EVENT_BY_ID_CACHE.get(event_id_str)
+    if cached_event is not None:
+        _EVENT_BY_ID_CACHE.move_to_end(event_id_str)
+    return cached_event
+
+
+def _cache_event_by_id(event_id_str, event_result):
+    _EVENT_BY_ID_CACHE[event_id_str] = event_result
+    _EVENT_BY_ID_CACHE.move_to_end(event_id_str)
+    while len(_EVENT_BY_ID_CACHE) > _EVENT_BY_ID_CACHE_LIMIT:
+        _EVENT_BY_ID_CACHE.popitem(last=False)
 
 
 def get_live_box_event():
@@ -193,30 +319,6 @@ def get_hltv_event_metadata(event_url):
 
 
 def search_events(query):
-    def collect_event_links(soup):
-        links = []
-        for a in soup.find_all("a", href=True):
-            href = a.get("href")
-            if (
-                not isinstance(href, str)
-                or not href.startswith("/events/")
-                or href == "/events/archive"
-            ):
-                continue
-            title_node = a.select_one("div.text-ellipsis")
-            text = (
-                title_node.get_text(" ", strip=True)
-                if title_node
-                else a.get_text(" ", strip=True)
-            )
-            if text:
-                links.append((href, text))
-        return links
-
-    def matches_query(slug, text, query_parts):
-        haystack = f"{slug.lower()} {text.lower()}"
-        return all(part in haystack for part in query_parts)
-
     try:
         query_parts = [part for part in re.findall(r"[a-z0-9]+", query.lower()) if part]
         years = {datetime.datetime.now().year}
@@ -234,29 +336,10 @@ def search_events(query):
                 search_payload = search_resp.json()
             except Exception:
                 search_payload = []
-            else:
-                seen = set()
-                results = []
-                for group in search_payload if isinstance(search_payload, list) else []:
-                    if not isinstance(group, dict):
-                        continue
 
-                    events = group.get("events", [])
-                    if not isinstance(events, list):
-                        continue
-
-                    for event in events:
-                        event_result = _build_event_result_from_search_entry(event)
-                        if not event_result or event_result["url"] in seen:
-                            continue
-                        if matches_query(
-                            event_result["slug"], event_result["name"], query_parts
-                        ):
-                            seen.add(event_result["url"])
-                            results.append(event_result)
-
-                if results:
-                    return results
+            results = _search_events_from_payload(search_payload, query_parts)
+            if results:
+                return results
 
         all_links = []
 
@@ -268,23 +351,13 @@ def search_events(query):
         )
         if resp.status_code == 200:
             all_links.extend(
-                collect_event_links(BeautifulSoup(resp.content, "html.parser"))
+                _collect_event_links(BeautifulSoup(resp.content, "html.parser"))
             )
 
         for year in sorted(years):
-            archive_url = f"https://www.hltv.org/events/archive?startDate={year}-01-01&endDate={year}-12-31"
-            archive_resp = get_with_impersonation_fallback(
-                archive_url,
-                impersonate="chrome124",
-                fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
-                timeout=10,
+            all_links.extend(
+                _iter_archive_links_for_year(year, stop_after_short_page=True)
             )
-            if archive_resp.status_code == 200:
-                all_links.extend(
-                    collect_event_links(
-                        BeautifulSoup(archive_resp.content, "html.parser")
-                    )
-                )
 
         seen = set()
         results = []
@@ -292,7 +365,7 @@ def search_events(query):
             if href in seen:
                 continue
             event_result = _build_event_result(href, text)
-            if event_result and matches_query(
+            if event_result and _matches_query(
                 event_result["slug"], event_result["name"], query_parts
             ):
                 seen.add(href)
@@ -302,6 +375,64 @@ def search_events(query):
     except Exception as e:
         print(f"Error searching events: {e}")
         return []
+
+
+def find_event_by_id(event_id):
+    try:
+        event_id_str = str(event_id).strip()
+        if not event_id_str.isdigit():
+            return None
+
+        cached_event = _get_cached_event_by_id(event_id_str)
+        if cached_event is not None:
+            return cached_event
+
+        search_url = f"https://www.hltv.org/search?term={quote(event_id_str)}"
+        search_resp = get_with_impersonation_fallback(
+            search_url,
+            impersonate="chrome124",
+            fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+            timeout=10,
+        )
+        if search_resp.status_code == 200:
+            try:
+                search_payload = search_resp.json()
+            except Exception:
+                search_payload = []
+
+            for event in _iter_search_event_entries(search_payload):
+                event_result = _build_event_result_from_search_entry(event)
+                if event_result and event_result.get("event_id") == event_id_str:
+                    _cache_event_by_id(event_id_str, event_result)
+                    return event_result
+
+        events_resp = get_with_impersonation_fallback(
+            "https://www.hltv.org/events",
+            impersonate="chrome124",
+            fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+            timeout=10,
+        )
+        if events_resp.status_code == 200:
+            for href, text in _collect_event_links(
+                BeautifulSoup(events_resp.content, "html.parser")
+            ):
+                event_result = _build_event_result(href, text)
+                if event_result and event_result.get("event_id") == event_id_str:
+                    _cache_event_by_id(event_id_str, event_result)
+                    return event_result
+
+        current_year = datetime.datetime.now().year
+        for year in range(current_year, 2011, -1):
+            for href, text in _iter_archive_links_for_year(year):
+                event_result = _build_event_result(href, text)
+                if event_result and event_result.get("event_id") == event_id_str:
+                    _cache_event_by_id(event_id_str, event_result)
+                    return event_result
+
+        return None
+    except Exception as e:
+        print(f"Error finding event by id: {e}")
+        return None
 
 
 def get_event_with_grouped_events(event_url):

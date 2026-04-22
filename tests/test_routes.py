@@ -481,6 +481,36 @@ class TestRoutesEndpoints:
         assert response.status_code == 404
         assert response.get_json() == {"error": "Failed to fetch event details"}
 
+    def test_event_resolve_endpoint_returns_event(self, client, app):
+        with app.app_context():
+            with patch(
+                "routes.events.find_event_by_id",
+                return_value={
+                    "event_id": "8048",
+                    "name": "PGL Bucharest 2026",
+                    "slug": "pgl-bucharest-2026",
+                    "url": "/events/8048/pgl-bucharest-2026",
+                },
+            ) as mock_find:
+                response = client.get("/api/v1/events/8048/resolve")
+
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "event_id": "8048",
+            "name": "PGL Bucharest 2026",
+            "slug": "pgl-bucharest-2026",
+            "url": "/events/8048/pgl-bucharest-2026",
+        }
+        mock_find.assert_called_once_with(8048)
+
+    def test_event_resolve_endpoint_returns_404_when_not_found(self, client, app):
+        with app.app_context():
+            with patch("routes.events.find_event_by_id", return_value=None):
+                response = client.get("/api/v1/events/999999/resolve")
+
+        assert response.status_code == 404
+        assert response.get_json() == {"error": "Event 999999 not found"}
+
     def test_match_stage_parser_extracts_stage_from_preformatted_text(self):
         html = b"""
         <html><body>
@@ -832,6 +862,7 @@ class TestFingerprintFallback:
 
             result = get_live_box_event()
 
+        assert result is not None
         assert result["event_id"] == "8242"
         assert result["url"] == "/events/8242/iem-rio-2026"
         assert mock_get.call_args_list[0].kwargs["impersonate"] == "chrome142"
@@ -865,3 +896,70 @@ class TestFingerprintFallback:
         assert data["matches"][0]["id"] == "2393046"
         assert mock_get.call_args_list[0].kwargs["impersonate"] == "chrome124"
         assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome136"
+
+
+class TestMatchDetails:
+    def test_match_stage_parser_restores_team_names_from_team_links(self):
+        html = b"""
+        <html><body>
+            <div class="teamsBox">
+                <div class="date">27th of March 2026</div>
+                <div class="time">17:35</div>
+                <div class="event text-ellipsis"><a href="/events/8248/blast-open-rotterdam-2026">BLAST Open Rotterdam 2026</a></div>
+                <div class="team1-gradient"><a href="/team/123/parivision">PARIVISION</a><div class="won">2</div></div>
+                <div class="team2-gradient"><a href="/team/456/falcons">Falcons</a><div class="lost">1</div></div>
+            </div>
+        </body></html>
+        """
+
+        response = HtmlResponse(
+            url="https://www.hltv.org/matches/2391772/test",
+            body=html,
+            encoding="utf-8",
+        )
+        parsed = MatchTeamsBoxParser.parse(response.css(".teamsBox"), response)
+
+        assert parsed["team1"]["name"] == "PARIVISION"
+        assert parsed["team2"]["name"] == "Falcons"
+
+    def test_match_spider_skips_cloudflare_challenge_html(self):
+        from hltv_scraper.hltv_scraper.spiders.hltv_match import HltvMatchSpider
+
+        html = b"""
+        <html>
+            <head><title>Just a moment...</title></head>
+            <body>
+                <div id="cf-challenge-running">Checking your browser before accessing hltv.org.</div>
+            </body>
+        </html>
+        """
+
+        spider = HltvMatchSpider(match="2391772/test")
+        response = HtmlResponse(
+            url="https://www.hltv.org/matches/2391772/test",
+            body=html,
+            encoding="utf-8",
+        )
+
+        assert list(spider.parse(response)) == []
+
+    def test_json_file_empty_condition_treats_null_match_payload_as_invalid(self, tmp_path):
+        from hltv_scraper.conditions import JsonFileEmptyCondition
+
+        invalid_match_payload = [
+            {
+                "match": {
+                    "date": None,
+                    "hour": None,
+                    "event": None,
+                    "team1": {"name": None},
+                    "team2": {"name": None},
+                },
+                "demoUrl": None,
+            }
+        ]
+        file_path = tmp_path / "data" / "match" / "2391772_test.json"
+        file_path.parent.mkdir(parents=True)
+        file_path.write_text(json.dumps(invalid_match_payload), encoding="utf-8")
+
+        assert JsonFileEmptyCondition(str(file_path)).check() is True

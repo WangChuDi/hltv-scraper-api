@@ -1,0 +1,27 @@
+tags:
+  - Events
+parameters:
+  - name: event_id
+    in: path
+    type: integer
+    required: true
+    description: Event ID from HLTV
+    example: 8048
+responses:
+  200:
+    description: Canonical event info
+    schema:
+      type: object
+      properties:
+        event_id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        url:
+          type: string
+  404:
+    description: Event not found
+  500:
+    description: Server error
