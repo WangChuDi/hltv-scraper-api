@@ -38,6 +38,12 @@ GET /api/v1/events/search?q=<query>
 ```
 Searches for events by name.
 
+### Resolve Event by ID
+```http
+GET /api/v1/events/<id>/resolve
+```
+Resolves an HLTV event ID to canonical event metadata (`event_id`, `slug`, `url`, `name`).
+
 ### Discover Event
 ```http
 GET /api/v1/events/discover?url=<event_url>
