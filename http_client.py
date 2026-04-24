@@ -7,7 +7,7 @@ from curl_cffi import requests
 HLTV_IMPERSONATION_CHAIN = tuple(
     value.strip()
     for value in os.getenv(
-        "HLTV_IMPERSONATION_CHAIN", "chrome136,chrome131,chrome124,chrome142"
+        "HLTV_IMPERSONATION_CHAIN", "chrome136,chrome131,chrome124"
     ).split(",")
     if value.strip()
 )
