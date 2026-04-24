@@ -865,8 +865,8 @@ class TestFingerprintFallback:
         assert result is not None
         assert result["event_id"] == "8242"
         assert result["url"] == "/events/8242/iem-rio-2026"
-        assert mock_get.call_args_list[0].kwargs["impersonate"] == "chrome142"
-        assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome136"
+        assert mock_get.call_args_list[0].kwargs["impersonate"] == "chrome136"
+        assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome131"
 
     def test_event_matches_endpoint_falls_back_to_secondary_impersonation(self, client):
         blocked_response = Mock()

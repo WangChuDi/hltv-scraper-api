@@ -10,8 +10,8 @@ from http_client import (
 
 def test_build_impersonation_chain_deduplicates_and_preserves_order():
     assert build_impersonation_chain(
-        primary="chrome142", fallbacks=["chrome136", "chrome142", "chrome124"]
-    ) == ["chrome142", "chrome136", "chrome124"]
+        primary="chrome136", fallbacks=["chrome131", "chrome136", "chrome124"]
+    ) == ["chrome136", "chrome131", "chrome124"]
 
 
 def test_detect_cloudflare_challenge_from_headers_and_body():
@@ -106,15 +106,15 @@ def test_falls_back_to_next_impersonation_on_cloudflare_block():
     with patch("http_client.requests.get", side_effect=[blocked, success]) as mock_get:
         result = get_with_impersonation_fallback(
             "https://www.hltv.org",
-            impersonate="chrome142",
-            fallback_impersonations=["chrome136", "chrome124"],
+            impersonate="chrome136",
+            fallback_impersonations=["chrome131", "chrome124"],
             timeout=10,
         )
 
     assert result is success
     assert mock_get.call_count == 2
-    assert mock_get.call_args_list[0].kwargs["impersonate"] == "chrome142"
-    assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome136"
+    assert mock_get.call_args_list[0].kwargs["impersonate"] == "chrome136"
+    assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome131"
 
 
 def test_falls_back_to_next_impersonation_on_exception():
@@ -125,14 +125,14 @@ def test_falls_back_to_next_impersonation_on_exception():
     ) as mock_get:
         result = get_with_impersonation_fallback(
             "https://www.hltv.org",
-            impersonate="chrome142",
-            fallback_impersonations=["chrome136"],
+            impersonate="chrome136",
+            fallback_impersonations=["chrome131"],
             timeout=10,
         )
 
     assert result is success
     assert mock_get.call_count == 2
-    assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome136"
+    assert mock_get.call_args_list[1].kwargs["impersonate"] == "chrome131"
 
 
 def test_uses_validate_response_to_trigger_fallback():
@@ -182,8 +182,8 @@ def test_raises_last_exception_when_all_attempts_fail():
         try:
             get_with_impersonation_fallback(
                 "https://www.hltv.org",
-                impersonate="chrome142",
-                fallback_impersonations=["chrome136"],
+                impersonate="chrome136",
+                fallback_impersonations=["chrome131"],
             )
         except TimeoutError as exc:
             assert str(exc) == "second"

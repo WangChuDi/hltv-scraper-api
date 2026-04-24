@@ -11,6 +11,41 @@ from http_client import (
 )
 
 
+_COMPLETED_TOURNAMENTS_FALLBACK = [
+    "ESL Pro League Season 23 Finals",
+    "BLAST Premier World Final 2025",
+    "IEM Katowice 2026",
+    "PGL Major Copenhagen 2025",
+    "BLAST Premier Fall Final 2025",
+]
+
+_LIQUIPEDIA_NOISE_BLOCKED_TERMS = (
+    "edit",
+    "contribute",
+    "support",
+    "report",
+    "submit",
+    "chat",
+    "help",
+    "portal",
+    "guidelines",
+    "twitter",
+    "search",
+    "scroll",
+    "top",
+    "liquipedia",
+    "coverage",
+    "statistics",
+    "vods",
+    "results",
+    "bracket",
+    "matches",
+    "playoffs",
+    "group stage",
+    "qualifier",
+)
+
+
 def _build_liquipedia_event_url(event_name):
     event_lower = event_name.lower()
 
@@ -60,6 +95,79 @@ def _extract_text_block(text, start_label, end_labels):
     ]
     end_pos = min(end_positions) if end_positions else len(tail)
     return tail[:end_pos].strip()
+
+
+def _dedupe_preserve_order(items):
+    seen = set()
+    deduped = []
+    for item in items:
+        if item and item not in seen:
+            seen.add(item)
+            deduped.append(item)
+    return deduped
+
+
+def _is_liquipedia_noise_line(line):
+    lowered = (line or "").strip().lower()
+    if not lowered:
+        return True
+
+    if any(term == lowered or term in lowered for term in _LIQUIPEDIA_NOISE_BLOCKED_TERMS):
+        return True
+
+    if lowered in {
+        "s-tier",
+        "a-tier",
+        "b-tier",
+        "c-tier",
+        "s tier",
+        "a tier",
+        "b tier",
+        "c tier",
+        "concluded",
+        "ongoing",
+    }:
+        return True
+
+    if re.fullmatch(r"\$?[\d,]+", line.strip()):
+        return True
+
+    if re.fullmatch(r"[A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*-\s*[A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?)?", line.strip()):
+        return True
+
+    return len(line.strip()) < 6
+
+
+def _extract_completed_s_tier_tournaments_from_main_page(page_content):
+    soup = BeautifulSoup(page_content, "html.parser")
+    completed_sections = [
+        section
+        for section in soup.select("div[data-filter-effect='fade'][data-filter-hideable-group]")
+        if section.select_one("span.tournaments-list-heading")
+        and section.select_one("span.tournaments-list-heading").get_text(strip=True).lower()
+        == "completed"
+    ]
+    if not completed_sections:
+        return []
+
+    tournaments = []
+
+    for section in completed_sections:
+        for item in section.select("ul.tournaments-list-type-list > li"):
+            item_text = item.get_text(" ", strip=True)
+            normalized_item_text = re.sub(r"\s+", " ", item_text)
+            if not re.search(r"(^|\s)S-Tier(\s|$)", normalized_item_text, re.IGNORECASE):
+                continue
+
+            name_node = item.select_one("span.tournaments-list-name span.tournament-name a")
+            raw_name = name_node.get_text(" ", strip=True) if name_node else None
+            normalized_name = re.sub(r"\s+", " ", raw_name or "").strip()
+            if _is_liquipedia_noise_line(normalized_name):
+                continue
+
+            tournaments.append(normalized_name)
+
+    return _dedupe_preserve_order(tournaments)[:5]
 
 
 def get_liquipedia_event_metadata(event_name):
@@ -200,14 +308,26 @@ def get_ongoing_tournaments():
 
 
 def get_completed_tournaments():
-    """Get recently completed tournaments - fallback list"""
-    return [
-        "ESL Pro League Season 23 Finals",
-        "BLAST Premier World Final 2025",
-        "IEM Katowice 2026",
-        "PGL Major Copenhagen 2025",
-        "BLAST Premier Fall Final 2025",
-    ]
+    """Get recently completed S-tier tournaments from Liquipedia with fallback."""
+    url = "https://liquipedia.net/counterstrike/Main_Page"
+
+    try:
+        response = get_with_impersonation_fallback(
+            url,
+            timeout=10,
+            impersonate="chrome",
+            fallback_impersonations=LIQUIPEDIA_IMPERSONATION_CHAIN,
+        )
+        if response.status_code == 200:
+            tournaments = _extract_completed_s_tier_tournaments_from_main_page(
+                response.content
+            )
+            if tournaments:
+                return tournaments
+    except Exception as e:
+        print(f"Error scraping completed Liquipedia tournaments: {e}")
+
+    return list(_COMPLETED_TOURNAMENTS_FALLBACK)
 
 
 def get_ongoing_s_tier_tournaments():

@@ -211,7 +211,7 @@ def get_live_box_event():
     try:
         resp = get_with_impersonation_fallback(
             "https://www.hltv.org",
-            impersonate="chrome142",
+            impersonate="chrome136",
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )
@@ -247,7 +247,7 @@ def get_hltv_event_metadata(event_url):
         full_url = f"https://www.hltv.org{event_path}"
         resp = get_with_impersonation_fallback(
             full_url,
-            impersonate="chrome142",
+            impersonate="chrome136",
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )
@@ -324,22 +324,64 @@ def search_events(query):
         years = {datetime.datetime.now().year}
         years.update(int(year) for year in re.findall(r"20\d{2}", query))
 
-        search_url = f"https://www.hltv.org/search?term={quote(query)}"
-        search_resp = get_with_impersonation_fallback(
-            search_url,
+        def _safe_search_payload(response):
+            try:
+                payload = response.json()
+            except Exception:
+                payload = []
+
+            return payload if isinstance(payload, (dict, list)) else []
+
+        query_search_resp = get_with_impersonation_fallback(
+            f"https://www.hltv.org/search?query={quote(query)}",
             impersonate="chrome124",
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )
-        if search_resp.status_code == 200:
-            try:
-                search_payload = search_resp.json()
-            except Exception:
-                search_payload = []
+        if query_search_resp.status_code == 200:
+            query_content = getattr(query_search_resp, "content", None)
+            query_links = []
+            has_query_html = isinstance(query_content, (bytes, str))
+            if has_query_html:
+                query_links = _collect_event_links(
+                    BeautifulSoup(query_content, "html.parser")
+                )
 
-            results = _search_events_from_payload(search_payload, query_parts)
+            seen = set()
+            results = []
+            for href, text in query_links:
+                if href in seen:
+                    continue
+                event_result = _build_event_result(href, text)
+                if event_result and _matches_query(
+                    event_result["slug"], event_result["name"], query_parts
+                ):
+                    seen.add(href)
+                    results.append(event_result)
+
             if results:
                 return results
+
+            if not has_query_html:
+                results = _search_events_from_payload(
+                    _safe_search_payload(query_search_resp), query_parts
+                )
+                if results:
+                    return results
+
+        if isinstance(getattr(query_search_resp, "content", None), (bytes, str)):
+            search_resp = get_with_impersonation_fallback(
+                f"https://www.hltv.org/search?term={quote(query)}",
+                impersonate="chrome124",
+                fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
+                timeout=10,
+            )
+            if search_resp.status_code == 200:
+                results = _search_events_from_payload(
+                    _safe_search_payload(search_resp), query_parts
+                )
+                if results:
+                    return results
 
         all_links = []
 
@@ -443,7 +485,7 @@ def get_event_with_grouped_events(event_url):
         full_url = f"https://www.hltv.org{event_path}"
         resp = get_with_impersonation_fallback(
             full_url,
-            impersonate="chrome142",
+            impersonate="chrome136",
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )

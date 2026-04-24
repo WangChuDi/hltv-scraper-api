@@ -45,7 +45,7 @@ class HltvMatchSpider(scrapy.Spider):
                 # Use the shared impersonation fallback chain to bypass Cloudflare
                 response_data = get_with_impersonation_fallback(
                     url,
-                    impersonate="chrome142",
+                    impersonate="chrome136",
                     fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
                     validate_response=lambda response: not _is_blocked_or_non_match_response(response),
                 )
