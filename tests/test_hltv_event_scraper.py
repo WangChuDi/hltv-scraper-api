@@ -10,7 +10,8 @@ def test_get_event_details_returns_none_on_non_200_response():
 
     with patch(
         "hltv_event_scraper.get_with_impersonation_fallback", return_value=response
-    ):
+    ) as mock_get:
         result = get_event_details("/events/123/test-event")
 
     assert result is None
+    assert mock_get.call_args.kwargs["impersonate"] == "chrome136"

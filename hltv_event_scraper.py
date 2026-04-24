@@ -35,7 +35,7 @@ def get_event_details(event_url):
 
         response = get_with_impersonation_fallback(
             normalized_url,
-            impersonate="chrome142",
+            impersonate="chrome136",
             fallback_impersonations=HLTV_IMPERSONATION_CHAIN,
             timeout=10,
         )
