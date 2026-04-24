@@ -19,6 +19,32 @@ _COMPLETED_TOURNAMENTS_FALLBACK = [
     "BLAST Premier Fall Final 2025",
 ]
 
+_LIQUIPEDIA_NOISE_BLOCKED_TERMS = (
+    "edit",
+    "contribute",
+    "support",
+    "report",
+    "submit",
+    "chat",
+    "help",
+    "portal",
+    "guidelines",
+    "twitter",
+    "search",
+    "scroll",
+    "top",
+    "liquipedia",
+    "coverage",
+    "statistics",
+    "vods",
+    "results",
+    "bracket",
+    "matches",
+    "playoffs",
+    "group stage",
+    "qualifier",
+)
+
 
 def _build_liquipedia_event_url(event_name):
     event_lower = event_name.lower()
@@ -86,32 +112,7 @@ def _is_liquipedia_noise_line(line):
     if not lowered:
         return True
 
-    blocked_terms = [
-        "edit",
-        "contribute",
-        "support",
-        "report",
-        "submit",
-        "chat",
-        "help",
-        "portal",
-        "guidelines",
-        "twitter",
-        "search",
-        "scroll",
-        "top",
-        "liquipedia",
-        "coverage",
-        "statistics",
-        "vods",
-        "results",
-        "bracket",
-        "matches",
-        "playoffs",
-        "group stage",
-        "qualifier",
-    ]
-    if any(term == lowered or term in lowered for term in blocked_terms):
+    if any(term == lowered or term in lowered for term in _LIQUIPEDIA_NOISE_BLOCKED_TERMS):
         return True
 
     if lowered in {
