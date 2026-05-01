@@ -1,16 +1,19 @@
 import logging
 import mimetypes
 import os
-import re
-import time
 
 from flask import Blueprint, Response, stream_with_context
-from curl_cffi import requests
 
 from http_client import (
     HLTV_IMPERSONATION_CHAIN,
-    detect_cloudflare_challenge,
     get_with_impersonation_fallback,
+)
+from routes.challenge_helpers import (
+    _build_ohmycaptcha_hint,
+    _normalize_ohmycaptcha_base_url,
+    _solve_turnstile_token,
+    detect_upstream_challenge,
+    solve_upstream_turnstile,
 )
 
 demos_bp = Blueprint("demos", __name__, url_prefix="/api/v1/download")
@@ -23,12 +26,6 @@ DEMO_CHALLENGE_BODY_MARKERS = (
 DEFAULT_HLTV_DEMO_IMPERSONATE = (
     os.getenv("HLTV_DEMO_IMPERSONATE", "chrome136").strip() or "chrome136"
 )
-OHMYCAPTCHA_ENV_HINT = {
-    "OHMYCAPTCHA_BASE_URL": "http://127.0.0.1:8004",
-    "OHMYCAPTCHA_CLIENT_KEY": "<your-client-key>",
-    "OHMYCAPTCHA_TASK_TYPE": "TurnstileTaskProxyless",
-    "OHMYCAPTCHA_TURNSTILE_SITEKEY": "<optional-sitekey>",
-}
 
 
 def _format_upstream_error_context(upstream_resp):
@@ -64,136 +61,10 @@ def _format_upstream_error_context(upstream_resp):
         body_preview = body_preview[:400] + "..."
 
     return headers, body_preview
-
-
-def _detect_cloudflare_challenge(upstream_resp):
-    return detect_cloudflare_challenge(
-        upstream_resp,
-        inspect_body=True,
-        extra_body_markers=DEMO_CHALLENGE_BODY_MARKERS,
-        return_signals=True,
-    )
-
-
-def _normalize_ohmycaptcha_base_url(raw_url):
-    base_url = (raw_url or "").strip().rstrip("/")
-    if base_url.endswith("/api/v1/health"):
-        return base_url[: -len("/api/v1/health")]
-    if base_url.endswith("/api/v1"):
-        return base_url[: -len("/api/v1")]
-    if base_url.endswith("/health"):
-        return base_url[: -len("/health")]
-    return base_url
-
-
 def _is_ohmycaptcha_configured():
     base_url = os.getenv("OHMYCAPTCHA_BASE_URL", "").strip()
     client_key = os.getenv("OHMYCAPTCHA_CLIENT_KEY", "").strip()
     return bool(base_url and client_key)
-
-
-def _build_ohmycaptcha_hint(reason):
-    return {
-        "reason": reason,
-        "how_to_enable": {
-            "set_env": OHMYCAPTCHA_ENV_HINT,
-            "note": "Configure env vars in hltv-scraper-api runtime. OHMYCAPTCHA_TURNSTILE_SITEKEY is optional fallback.",
-        },
-    }
-
-
-def _extract_turnstile_sitekey(html_text):
-    if not html_text:
-        return None
-
-    patterns = [
-        r'data-sitekey=["\']([^"\']+)["\']',
-        r'sitekey["\']?\s*[:=]\s*["\']([^"\']+)["\']',
-        r'turnstile\.render\([^,]+,\s*\{[^\}]*sitekey\s*:\s*["\']([^"\']+)["\']',
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, html_text, flags=re.IGNORECASE)
-        if match:
-            candidate = (match.group(1) or "").strip()
-            if candidate:
-                return candidate
-
-    return None
-
-
-def _create_ohmycaptcha_task(base_url, client_key, website_url, sitekey):
-    task_type = os.getenv("OHMYCAPTCHA_TASK_TYPE", "TurnstileTaskProxyless")
-    payload = {
-        "clientKey": client_key,
-        "task": {
-            "type": task_type,
-            "websiteURL": website_url,
-            "websiteKey": sitekey,
-        },
-    }
-    create_resp = requests.post(f"{base_url}/createTask", json=payload, timeout=20)
-    create_resp.raise_for_status()
-    data = create_resp.json()
-    if data.get("errorId") != 0:
-        raise RuntimeError(
-            f"ohmycaptcha createTask failed: {data.get('errorCode')} {data.get('errorDescription')}"
-        )
-
-    task_id = data.get("taskId")
-    if not task_id:
-        raise RuntimeError("ohmycaptcha createTask returned empty taskId")
-
-    return task_id
-
-
-def _poll_ohmycaptcha_task(base_url, client_key, task_id):
-    poll_timeout_seconds = int(os.getenv("OHMYCAPTCHA_POLL_TIMEOUT_SECONDS", "90"))
-    poll_interval_seconds = float(os.getenv("OHMYCAPTCHA_POLL_INTERVAL_SECONDS", "2"))
-    deadline = time.time() + poll_timeout_seconds
-
-    while time.time() < deadline:
-        result_resp = requests.post(
-            f"{base_url}/getTaskResult",
-            json={"clientKey": client_key, "taskId": task_id},
-            timeout=20,
-        )
-        result_resp.raise_for_status()
-        result_data = result_resp.json()
-
-        if result_data.get("errorId") != 0:
-            raise RuntimeError(
-                "ohmycaptcha getTaskResult failed: "
-                f"{result_data.get('errorCode')} {result_data.get('errorDescription')}"
-            )
-
-        status = result_data.get("status")
-        if status == "ready":
-            solution = result_data.get("solution") or {}
-            token = solution.get("token")
-            if not token:
-                raise RuntimeError(
-                    "ohmycaptcha returned ready status without solution.token"
-                )
-            return token
-
-        if status != "processing":
-            raise RuntimeError(f"Unexpected ohmycaptcha task status: {status}")
-
-        time.sleep(poll_interval_seconds)
-
-    raise TimeoutError("Timed out waiting for ohmycaptcha turnstile token")
-
-
-def _solve_turnstile_token(website_url, sitekey):
-    base_url = _normalize_ohmycaptcha_base_url(os.getenv("OHMYCAPTCHA_BASE_URL", ""))
-    if not base_url:
-        raise RuntimeError(
-            "OHMYCAPTCHA_BASE_URL is not configured (expected API root, e.g. http://host:8004 or http://host:8004/api/v1)"
-        )
-
-    client_key = os.getenv("OHMYCAPTCHA_CLIENT_KEY", "").strip()
-    task_id = _create_ohmycaptcha_task(base_url, client_key, website_url, sitekey)
-    return _poll_ohmycaptcha_task(base_url, client_key, task_id)
 
 
 def _request_hltv_demo(target_url, turnstile_token=None):
@@ -280,54 +151,43 @@ def download_demo(demo_id: str):
 
         if upstream_resp.status_code != 200:
             should_enter_challenge_flow = True
-            challenge_detected, challenge_signals = _detect_cloudflare_challenge(upstream_resp)
+            challenge_detected, challenge_signals = detect_upstream_challenge(
+                upstream_resp,
+                extra_body_markers=DEMO_CHALLENGE_BODY_MARKERS,
+            )
         elif _is_html_response(upstream_resp):
             should_enter_challenge_flow = True
-            challenge_detected, challenge_signals = _detect_cloudflare_challenge(upstream_resp)
+            challenge_detected, challenge_signals = detect_upstream_challenge(
+                upstream_resp,
+                extra_body_markers=DEMO_CHALLENGE_BODY_MARKERS,
+            )
 
         if should_enter_challenge_flow:
-            solver_attempted = False
-            solver_error = None
-            ohmycaptcha_hint = None
-            if challenge_detected and _is_ohmycaptcha_configured():
-                sitekey = _extract_turnstile_sitekey(upstream_resp.text or "")
-                if not sitekey:
-                    sitekey = os.getenv("OHMYCAPTCHA_TURNSTILE_SITEKEY", "").strip()
-                if sitekey:
-                    solver_attempted = True
-                    try:
-                        token = _solve_turnstile_token(target_url, sitekey)
-                        retry_resp = _request_hltv_demo(
-                            target_url,
-                            turnstile_token=token,
-                        )
-                        upstream_resp = retry_resp
-                    except Exception as exc:
-                        solver_error = str(exc)
-                        logger.warning(
-                            "ohmycaptcha solve attempt failed: demo_id=%s target_url=%s sitekey=%s error=%s",
-                            demo_id,
-                            target_url,
-                            sitekey,
-                            solver_error,
-                        )
-                else:
-                    solver_error = (
-                        "Cloudflare challenge detected but no Turnstile sitekey was found "
-                        "(neither in response body nor OHMYCAPTCHA_TURNSTILE_SITEKEY)"
-                    )
-            elif challenge_detected:
-                ohmycaptcha_hint = _build_ohmycaptcha_hint(
-                    "Cloudflare challenge detected, but OHMYCAPTCHA_BASE_URL / OHMYCAPTCHA_CLIENT_KEY are not fully configured"
-                )
+            solve_result = solve_upstream_turnstile(
+                upstream_resp,
+                target_url=target_url,
+                request_with_token=lambda token: _request_hltv_demo(
+                    target_url,
+                    turnstile_token=token,
+                ),
+                extra_body_markers=DEMO_CHALLENGE_BODY_MARKERS,
+                missing_config_reason=(
+                    "Cloudflare challenge detected, but OHMYCAPTCHA_BASE_URL / "
+                    "OHMYCAPTCHA_CLIENT_KEY are not fully configured"
+                ),
+            )
+
+            upstream_resp = solve_result["response"]
+            solver_attempted = solve_result["solver_attempted"]
+            solver_error = solve_result["solver_error"]
+            ohmycaptcha_hint = solve_result["ohmycaptcha_hint"]
 
             final_is_html = _is_html_response(upstream_resp)
             final_headers, final_body_preview = _format_upstream_error_context(
                 upstream_resp
             )
-            final_challenge_detected, final_challenge_signals = _detect_cloudflare_challenge(
-                upstream_resp
-            )
+            final_challenge_detected = solve_result["challenge_detected"]
+            final_challenge_signals = solve_result["challenge_signals"]
             final_failed = upstream_resp.status_code != 200 or final_is_html
 
             if final_failed:
@@ -368,8 +228,9 @@ def download_demo(demo_id: str):
             if retry_stream_resp.status_code != 200 or _is_html_response(
                 retry_stream_resp
             ):
-                challenge_detected, challenge_signals = _detect_cloudflare_challenge(
-                    retry_stream_resp
+                challenge_detected, challenge_signals = detect_upstream_challenge(
+                    retry_stream_resp,
+                    extra_body_markers=DEMO_CHALLENGE_BODY_MARKERS,
                 )
                 payload = {
                     "error": f"Failed to fetch demo after stream retry: HLTV returned {retry_stream_resp.status_code}",
