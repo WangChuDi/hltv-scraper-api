@@ -68,7 +68,7 @@ class JsonFileEmptyCondition(Condition):
         try:
             with open(self.file_path, "r") as file:
                 file_data = json.load(file)
-                return file_data == [] or _is_invalid_cached_match_payload(self.file_path, file_data)
+                return file_data in ([], {}) or _is_invalid_cached_match_payload(self.file_path, file_data)
         except Exception as e:
             print(f"Error loading JSON file: {e}")
             return True

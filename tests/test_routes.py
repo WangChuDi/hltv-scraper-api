@@ -131,6 +131,240 @@ class TestRoutesEndpoints:
         assert response.status_code == 200
         assert json.loads(response.data) == {"status": "ok"}
 
+    def test_match_detail_returns_challenge_context_when_scraper_yields_empty_list(
+        self, client, app
+    ):
+        upstream_response = Mock()
+        upstream_response.status_code = 403
+        upstream_response.headers = {
+            "Content-Type": "text/html; charset=UTF-8",
+            "Server": "cloudflare",
+            "CF-RAY": "ray-123",
+            "cf-mitigated": "challenge",
+        }
+        upstream_response.text = (
+            "<html><title>Just a moment...</title>"
+            "<script>window._cf_chl_opt={};</script>"
+            "<body>challenge-platform</body></html>"
+        )
+
+        with app.app_context():
+            with patch(
+                "routes.matches.HLTVScraper.get_match_state",
+                return_value={"status": "ready", "data": []},
+            ):
+                with patch(
+                    "routes.matches.get_with_impersonation_fallback",
+                    return_value=upstream_response,
+                ):
+                    response = client.get(
+                        "/api/v1/matches/2393225/red-canids-vs-gentle-mates-iem-rio-2026"
+                    )
+
+        assert response.status_code == 403
+        data = response.get_json()
+        assert data["challenge_detected"] is True
+        assert data["target_url"] == (
+            "https://www.hltv.org/matches/2393225/"
+            "red-canids-vs-gentle-mates-iem-rio-2026"
+        )
+        assert any(
+            signal.startswith("status:403") for signal in data["challenge_signals"]
+        )
+        assert any(
+            signal.startswith("header:CF-RAY") for signal in data["challenge_signals"]
+        )
+        assert any(
+            signal.startswith("body:just a moment")
+            for signal in data["challenge_signals"]
+        )
+
+    def test_match_detail_returns_non_challenge_upstream_context_when_empty_list(
+        self, client, app
+    ):
+        upstream_response = Mock()
+        upstream_response.status_code = 200
+        upstream_response.headers = {
+            "Content-Type": "text/html; charset=UTF-8",
+        }
+        upstream_response.text = "<html><body>Access denied</body></html>"
+
+        with app.app_context():
+            with patch(
+                "routes.matches.HLTVScraper.get_match_state",
+                return_value={"status": "ready", "data": []},
+            ):
+                with patch(
+                    "routes.matches.get_with_impersonation_fallback",
+                    return_value=upstream_response,
+                ):
+                    response = client.get("/api/v1/matches/123/test-match")
+
+        assert response.status_code == 502
+        data = response.get_json()
+        assert data["challenge_detected"] is False
+        assert data["challenge_signals"] == []
+        assert "ohmycaptcha_hint" not in data
+
+    def test_match_detail_preserves_successful_payload(self, client, app):
+        payload = [{"match": {"team1": {"name": "A"}, "team2": {"name": "B"}}}]
+
+        with app.app_context():
+            with patch(
+                "routes.matches.HLTVScraper.get_match_state",
+                return_value={"status": "ready", "data": payload},
+            ):
+                response = client.get("/api/v1/matches/123/test-match")
+
+        assert response.status_code == 200
+        assert response.get_json() == payload
+
+    def test_match_detail_returns_processing_when_async_fetch_is_running(
+        self, client, app
+    ):
+        with app.app_context():
+            with patch(
+                "routes.matches.HLTVScraper.get_match_state",
+                return_value={"status": "processing", "retry_after": 3},
+            ):
+                response = client.get("/api/v1/matches/123/test-match")
+
+        assert response.status_code == 202
+        assert response.headers["Retry-After"] == "3"
+        assert response.get_json() == {
+            "status": "processing",
+            "message": "Match details are being fetched",
+            "retry_after": 3,
+            "target_url": "https://www.hltv.org/matches/123/test-match",
+        }
+
+    def test_match_detail_returns_failed_state_when_background_fetch_failed(
+        self, client, app
+    ):
+        with app.app_context():
+            with patch(
+                "routes.matches.HLTVScraper.get_match_state",
+                return_value={
+                    "status": "failed",
+                    "error": "Failed to fetch match details",
+                    "message": "Background spider exited before producing a usable cached result",
+                    "retry_after": 2,
+                },
+            ):
+                response = client.get("/api/v1/matches/123/test-match")
+
+        assert response.status_code == 500
+        assert response.headers["Retry-After"] == "2"
+        assert response.get_json() == {
+            "status": "failed",
+            "error": "Failed to fetch match details",
+            "message": "Background spider exited before producing a usable cached result",
+            "retry_after": 2,
+            "target_url": "https://www.hltv.org/matches/123/test-match",
+        }
+
+    def test_match_detail_uses_ohmycaptcha_retry_when_configured(self, client, app):
+        challenge_response = Mock()
+        challenge_response.status_code = 403
+        challenge_response.headers = {
+            "Content-Type": "text/html; charset=UTF-8",
+            "Server": "cloudflare",
+            "CF-RAY": "ray-123",
+        }
+        challenge_response.text = (
+            '<html><body><div data-sitekey="sitekey-123"></div>'
+            "<script>window._cf_chl_opt={};</script></body></html>"
+        )
+
+        retry_response = Mock()
+        retry_response.status_code = 200
+        retry_response.headers = {
+            "Content-Type": "text/html; charset=UTF-8",
+        }
+        retry_response.text = "<html><body>resolved</body></html>"
+
+        with app.app_context():
+            with patch(
+                "routes.matches.HLTVScraper.get_match_state",
+                return_value={"status": "ready", "data": []},
+            ):
+                with patch(
+                    "routes.challenge_helpers._solve_turnstile_token",
+                    return_value="token-123",
+                ):
+                    with patch(
+                        "routes.matches.get_with_impersonation_fallback",
+                        side_effect=[challenge_response, retry_response],
+                    ) as mock_get:
+                        with patch.dict(
+                            "os.environ",
+                            {
+                                "OHMYCAPTCHA_BASE_URL": "http://127.0.0.1:8004",
+                                "OHMYCAPTCHA_CLIENT_KEY": "configured-client-key",
+                            },
+                            clear=False,
+                        ):
+                            response = client.get(
+                                "/api/v1/matches/2393225/red-canids-vs-gentle-mates-iem-rio-2026"
+                            )
+
+        assert response.status_code == 502
+        data = response.get_json()
+        assert mock_get.call_count == 2
+        assert data["challenge_detected"] is False
+        assert data["challenge_signals"] == []
+        assert "solver_error" not in data
+        assert "ohmycaptcha_hint" not in data
+        assert mock_get.call_args_list[1].kwargs["headers"] == {
+            "cf-turnstile-response": "token-123",
+            "x-turnstile-token": "token-123",
+            "Referer": "https://www.hltv.org/matches/2393225/red-canids-vs-gentle-mates-iem-rio-2026",
+        }
+
+    def test_match_detail_returns_hint_when_ohmycaptcha_missing(self, client, app):
+        challenge_response = Mock()
+        challenge_response.status_code = 403
+        challenge_response.headers = {
+            "Content-Type": "text/html; charset=UTF-8",
+            "Server": "cloudflare",
+            "CF-RAY": "ray-123",
+        }
+        challenge_response.text = (
+            "<html><title>Just a moment...</title>"
+            "<script>window._cf_chl_opt={};</script></html>"
+        )
+
+        with app.app_context():
+            with patch(
+                "routes.matches.HLTVScraper.get_match_state",
+                return_value={"status": "ready", "data": []},
+            ):
+                with patch(
+                    "routes.matches.get_with_impersonation_fallback",
+                    return_value=challenge_response,
+                ):
+                    with patch.dict(
+                        "os.environ",
+                        {
+                            "OHMYCAPTCHA_BASE_URL": "",
+                            "OHMYCAPTCHA_CLIENT_KEY": "",
+                            "OHMYCAPTCHA_TURNSTILE_SITEKEY": "",
+                        },
+                        clear=False,
+                    ):
+                        response = client.get("/api/v1/matches/123/test-match")
+
+        assert response.status_code == 403
+        data = response.get_json()
+        assert data["challenge_detected"] is True
+        assert "ohmycaptcha_hint" in data
+        assert (
+            data["ohmycaptcha_hint"]["how_to_enable"]["set_env"][
+                "OHMYCAPTCHA_BASE_URL"
+            ]
+            == "http://127.0.0.1:8004"
+        )
+
     def test_demo_download_logs_upstream_403_context(self, client, app, caplog):
         upstream_response = Mock()
         upstream_response.status_code = 403
@@ -260,7 +494,10 @@ class TestRoutesEndpoints:
         download_response.iter_content.return_value = [b"demo"]
 
         with app.app_context():
-            with patch("routes.demos._solve_turnstile_token", return_value="token123"):
+            with patch(
+                "routes.challenge_helpers._solve_turnstile_token",
+                return_value="token123",
+            ):
                 with patch(
                     "routes.demos.get_with_impersonation_fallback",
                     side_effect=[challenge_response, download_response],

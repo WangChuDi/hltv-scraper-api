@@ -37,6 +37,26 @@ def test_detect_cloudflare_challenge_ignores_normal_hltv_page_markers():
     assert detect_cloudflare_challenge(response) is False
 
 
+def test_detect_cloudflare_challenge_ignores_bot_management_cookie_on_normal_page():
+    response = Mock()
+    response.status_code = 200
+    response.headers = {
+        "Server": "cloudflare",
+        "CF-RAY": "abc",
+        "Set-Cookie": "__cf_bm=abc123; path=/; HttpOnly",
+    }
+    response.text = (
+        '<html><div class="teamsBox"></div>'
+        '<div id="all-content"></div>'
+        '<a class="stream-box" data-demo-link="/download/demo/123"></a></html>'
+    )
+
+    detected, signals = detect_cloudflare_challenge(response, return_signals=True)
+
+    assert detected is False
+    assert "header:Set-Cookie=__cf_bm" not in signals
+
+
 def test_streaming_requests_do_not_inspect_response_body():
     response = Mock(status_code=200, headers={"Server": "cloudflare"})
     type(response).text = property(
@@ -54,7 +74,7 @@ def test_streaming_requests_do_not_inspect_response_body():
     assert result is response
 
 
-def test_detect_cloudflare_challenge_uses_cookie_headers_when_body_is_skipped():
+def test_detect_cloudflare_challenge_ignores_bot_management_cookie_when_body_is_skipped():
     response = Mock()
     response.status_code = 200
     response.headers = {
@@ -62,7 +82,25 @@ def test_detect_cloudflare_challenge_uses_cookie_headers_when_body_is_skipped():
         "Set-Cookie": "__cf_bm=abc123; path=/; HttpOnly",
     }
 
-    assert detect_cloudflare_challenge(response, inspect_body=False) is True
+    assert detect_cloudflare_challenge(response, inspect_body=False) is False
+
+
+def test_detect_cloudflare_challenge_uses_clearance_cookie_when_body_is_skipped():
+    response = Mock()
+    response.status_code = 200
+    response.headers = {
+        "Server": "cloudflare",
+        "Set-Cookie": "cf_clearance=abc123; path=/; HttpOnly",
+    }
+
+    detected, signals = detect_cloudflare_challenge(
+        response,
+        inspect_body=False,
+        return_signals=True,
+    )
+
+    assert detected is True
+    assert "header:Set-Cookie=cf_clearance" in signals
 
 
 def test_detect_cloudflare_challenge_can_return_signals_with_extra_markers():
