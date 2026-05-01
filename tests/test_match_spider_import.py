@@ -4,7 +4,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import http_client as root_http_client
-from hltv_scraper.hltv_scraper.spiders.hltv_match import HltvMatchSpider
+from hltv_scraper.hltv_scraper.spiders.hltv_match import (
+    HltvMatchSpider,
+    _is_blocked_or_non_match_response,
+)
 from hltv_scraper.hltv_scraper import http_client as package_http_client
 
 
@@ -56,3 +59,20 @@ def test_match_spider_non_200_skips_blocked_response():
         requests = list(spider.start_requests())
 
     assert requests == []
+
+
+def test_match_spider_allows_parseable_200_with_bot_management_cookie():
+    response = Mock()
+    response.status_code = 200
+    response.headers = {
+        "Server": "cloudflare",
+        "CF-RAY": "abc",
+        "Set-Cookie": "__cf_bm=abc123; path=/; HttpOnly",
+    }
+    response.text = (
+        '<html><div class="teamsBox"></div>'
+        '<div id="all-content"></div>'
+        '<a class="stream-box" data-demo-link="/download/demo/123"></a></html>'
+    )
+
+    assert _is_blocked_or_non_match_response(response) is False

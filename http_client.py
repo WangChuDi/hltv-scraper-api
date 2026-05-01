@@ -29,7 +29,7 @@ CHALLENGE_BODY_MARKERS = [
     "window._cf_chl_opt",
     "please enable javascript and cookies",
 ]
-CHALLENGE_COOKIE_MARKERS = ("cf_clearance", "__cf_bm", "cf_chl_")
+CHALLENGE_COOKIE_MARKERS = ("cf_clearance", "cf_chl_")
 
 
 def _dedupe_preserve_order(values):
@@ -91,9 +91,7 @@ def detect_cloudflare_challenge(
     if has_cf_cookie_signal:
         if "cf_clearance" in set_cookie:
             signals.append("header:Set-Cookie=cf_clearance")
-        elif "__cf_bm" in set_cookie:
-            signals.append("header:Set-Cookie=__cf_bm")
-        else:
+        elif "cf_chl_" in set_cookie:
             signals.append("header:Set-Cookie=cf_chl_")
 
     has_cf_headers = bool(cf_ray) or "cloudflare" in server or has_cf_cookie_signal
