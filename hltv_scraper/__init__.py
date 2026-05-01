@@ -17,10 +17,11 @@ from .cache_config import (
 
 
 class HLTVScraper:
-    _manager = None
+    _manager: SpiderManager | None = None
+    MATCH_DETAIL_RETRY_AFTER_SECONDS = 2
 
     @classmethod
-    def _get_manager(cls):
+    def _get_manager(cls) -> SpiderManager:
         if cls._manager is None:
             from config import BASE_DIR
             cls._manager = SpiderManager(BASE_DIR)
@@ -44,6 +45,24 @@ class HLTVScraper:
         args = f"-a match={match_link} -o data/{path}.json"
         manager.execute(name, path, args, CACHE_HOURS_MATCHES)
         return manager.get_result(path)
+
+    @staticmethod
+    def get_match_state(id: str, match_name: str) -> Dict[str, Any]:
+        manager = HLTVScraper._get_manager()
+        name = "hltv_match"
+        match_link = f"{id}/{match_name}"
+        path = f"match/{id}_{match_name}"
+        args = f"-a match={match_link} -o data/{path}.json"
+        state = manager.execute_async(
+            name,
+            path,
+            args,
+            CACHE_HOURS_MATCHES,
+            retry_after=HLTVScraper.MATCH_DETAIL_RETRY_AFTER_SECONDS,
+        )
+        if state.get("status") == "ready":
+            state["data"] = manager.get_result(path)
+        return state
 
     @staticmethod
     def get_team_rankings(type: str = "hltv", year: str = "", month: str = "", day: int = 0) -> Dict[str, Any]:
@@ -83,7 +102,7 @@ class HLTVScraper:
         return manager.get_result(path)
 
     @staticmethod
-    def get_results(offset: int = 0) -> Dict[str, Any]:
+    def get_results(offset: int = 0) -> Any:
         manager = HLTVScraper._get_manager()
         name = "hltv_results"
         path = f"results/results_{offset}"
@@ -141,7 +160,7 @@ class HLTVScraper:
     def get_events() -> list[dict[str, Any]]:
         """Get unique events from recent results"""
         results = HLTVScraper.get_results(0)
-        events_dict = {}
+        events_dict: dict[str, dict[str, Any]] = {}
         for match in results:
             event_name = match.get('event', '')
             if event_name and event_name not in events_dict:
